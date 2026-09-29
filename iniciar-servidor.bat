@@ -4,12 +4,27 @@ title RoboSapiens - Servidor Estoura Balao
 cd /d "%~dp0"
 set "PYEXE="
 
+rem O .bat precisa estar na mesma pasta dos arquivos do sistema
+if exist "servidor.py" goto achou
+echo.
+echo  ERRO: o arquivo servidor.py nao esta nesta pasta:
+echo    %CD%
+echo.
+echo  Este .bat precisa ficar junto com os arquivos do sistema
+echo  (servidor.py, index.html, script.js, style.css e a pasta assets).
+echo  Baixe o sistema completo em:
+echo    https://github.com/douglascsc/baloes/archive/refs/heads/main.zip
+echo  extraia o ZIP e rode o iniciar-servidor.bat que esta dentro da pasta.
+echo.
+goto fim
+:achou
+
 rem 1) Pasta onde o Python foi instalado neste computador
 if exist "C:\Program Files (x86)\Python-3.14.7\python.exe" set "PYEXE=C:\Program Files (x86)\Python-3.14.7\python.exe"
 if defined PYEXE goto rodar
 
 rem 2) Outras pastas comuns de instalacao
-for /d %%D in ("%ProgramFiles(x86)%\Python*" "%ProgramFiles%\Python*" "%LocalAppData%\Programs\Python\Python*" "C:\Python*") do if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+for /d %%D in ("%ProgramFiles(x86)%\Python*" "%ProgramFiles%\Python*" "%LocalAppData%\Programs\Python\Python*" "%LocalAppData%\Python\pythoncore-*" "C:\Python*") do if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
 if defined PYEXE goto rodar
 
 rem 3) Python no PATH
