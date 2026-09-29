@@ -36,7 +36,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
-- **Jogos por equipe na preliminar (Configurações):** **2**, **4** ou **6**, ou seja, N, 2N ou 3N confrontos conforme o número de equipes inscritas. Com 7 equipes, são **7, 14 ou 21** confrontos (21 = todos contra todos). Nunca há adversário repetido; se o número de equipes não permitir, o sistema avisa e usa o maior possível.
+- **Fase preliminar (Configurações):** padrão **todos contra todos**: com 7 equipes são **21 confrontos** e cada equipe joga 6 vezes; com 8 equipes, 28 confrontos. Também dá para escolher 2 ou 4 jogos por equipe (7 ou 14 confrontos com 7 equipes). Nunca há adversário repetido; se o número de equipes não permitir, o sistema avisa e usa o maior possível.
 - **Fase preliminar:** funciona com qualquer número de equipes (mínimo 4). N equipes geram N confrontos: 6 → 6, 7 → 7, 8 → 8, 10 → 10. Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas. A exceção é com 4 equipes, em que isso é matematicamente impossível; o sistema avisa. Os 4 primeiros vão às semifinais.
 - Confronto: Round 1 (2 min) → intervalo (2 min, automático) → Round 2 (1 min) → conferência do resultado.
 - +100 por balão adversário · +30 quando o adversário sai da arena.
@@ -90,7 +90,7 @@ Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica
 ## Configurações de regras
 Em **Config.**, dá para ajustar, sem mexer no código:
 - **Arena Livre:** rodadas (1 a 5), tempo por tentativa e pontos (+ outra cor, − própria cor, − saída).
-- **Confronto Direto:** jogos por equipe (2, 4 ou 6), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
+- **Confronto Direto:** fase preliminar (todos contra todos, 2 ou 4 jogos por equipe), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
 
 Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
 

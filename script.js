@@ -74,8 +74,8 @@ const DEFAULT_SCHEDULE = [
   ["10:15", "10:30", "Preparação para a Etapa 1", "Organização das equipes, conferência dos robôs, identificação das equipes e preparação da arena."],
   ["10:30", "11:30", "Etapa 1 — Arena Livre", "Cada equipe terá **até 30 segundos** para estourar o maior número possível de balões das demais equipes, conforme as regras da modalidade."],
   ["11:30", "13:30", "Intervalo para Almoço", "Pausa para almoço e descanso das equipes e organização da arena."],
-  ["13:30", "14:00", "Preparação para a Etapa 2", "Organização das equipes classificadas, conferência dos robôs, definição dos confrontos e preparação da arena."],
-  ["14:00", "16:00", "Etapa 2 — Confronto Direto", "Confrontos entre duas equipes. Cada partida será disputada em **2 rounds**, com intervalo de até **2 minutos** entre eles."],
+  ["13:30", "13:45", "Preparação para a Etapa 2", "Organização das equipes classificadas, conferência dos robôs, definição dos confrontos e preparação da arena."],
+  ["13:45", "16:00", "Etapa 2 — Confronto Direto", "Confrontos entre duas equipes. Cada partida será disputada em **2 rounds**, com intervalo de até **2 minutos** entre eles."],
   ["16:00", "17:00", "Apuração e Premiação", "Conferência dos resultados, definição da classificação final e entrega das premiações às equipes."],
   ["17:00", "17:30", "Encerramento", "Agradecimentos, registro final e encerramento oficial da competição."]
 ];
@@ -93,7 +93,7 @@ function defaultSettings() {
     freeOther: 50, freeOwn: 50, freeExit: 30,
     cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30,
     winPts: 3, drawPts: 1, lossPts: 0,
-    sound: true, soundTv: false, autoBackup: true, cupGames: 2,
+    sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
     beepMid: true, beepMidAt: "10, 5", beepEnd: true,
     // Com poucos jogos por equipe, as empatadas raramente se enfrentaram: por isso o saldo vem antes
     // do confronto direto. Com 2 jogos, "Vitórias" não diferencia ninguém (3/1/0).
@@ -154,7 +154,9 @@ function normalize(raw) {
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
   st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30);
   st.winPts = clampI(st.winPts, 0, 10, 3); st.drawPts = clampI(st.drawPts, 0, 10, 1); st.lossPts = clampI(st.lossPts, 0, 10, 0);
-  st.cupGames = [2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 2;
+  st.cupGames = [0, 2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 0;
+  // Padrão passou a ser "todos contra todos": quem estava no padrão antigo (2) migra uma vez
+  if (!(s.settings && s.settings.cupV === 2)) { if (Number(s.settings?.cupGames ?? 2) === 2) st.cupGames = 0; st.cupV = 2; }
   st.sound = st.sound !== false; st.soundTv = !!st.soundTv; st.autoBackup = st.autoBackup !== false;
   st.beepMid = st.beepMid !== false; st.beepEnd = st.beepEnd !== false;
   // segundos dos bipes intermediários: "10, 5" (de 1 a 600, sem repetir, do maior para o menor)
@@ -206,6 +208,15 @@ function normalize(raw) {
   s.schedule = (Array.isArray(s.schedule) ? s.schedule : defaultSchedule()).filter(x => x && typeof x === "object")
     .map(x => ({ id: str(x.id) || uid(), start: hhmm(x.start), end: hhmm(x.end), title: str(x.title) || "Atividade", detail: str(x.detail) }))
     .sort((a, b) => (a.start || "99").localeCompare(b.start || "99") || (a.end || "").localeCompare(b.end || ""));
+  // Atualização única do cronograma padrão (Etapa 2 começa às 13h45); atividades editadas não mudam
+  if (!(num(s.schedV, 0) >= 2)) {
+    s.schedule.forEach(x => {
+      if (x.title === "Preparação para a Etapa 2" && x.start === "13:30" && x.end === "14:00") x.end = "13:45";
+      if (x.title === "Etapa 2 — Confronto Direto" && x.start === "14:00" && x.end === "16:00") x.start = "13:45";
+    });
+    s.schedule.sort((a, b) => (a.start || "99").localeCompare(b.start || "99") || (a.end || "").localeCompare(b.end || ""));
+  }
+  s.schedV = 2;
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
   s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
   s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
@@ -866,12 +877,14 @@ function cupSummary() {
    a 1 e a 2 posições de distância), ordenado para que nenhuma equipe jogue
    dois confrontos seguidos e os jogos de cada equipe fiquem espaçados. */
 // 2, 4 ou 6 jogos por equipe (N, 2N ou 3N confrontos). Cada equipe precisa ter adversárias suficientes: k ≤ N − 1.
-const gamesPerTeam = n => { let k = cfg().cupGames; while (k > 2 && k > n - 1) k -= 2; return k; };
+// 0 = todos contra todos (N − 1 jogos por equipe)
+const gamesPerTeam = n => { if (cfg().cupGames === 0) return Math.max(1, n - 1); let k = cfg().cupGames; while (k > 2 && k > n - 1) k -= 2; return k; };
 function buildPrelimPairs(ids, k = 2) {
   const n = ids.length, edges = [];
-  for (let d = 1; d <= k / 2; d++) for (let i = 0; i < n; i++) edges.push([ids[i], ids[(i + d) % n]]);
+  if (k >= n - 1) { for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) edges.push([ids[i], ids[j]]); } // todos contra todos
+  else for (let d = 1; d <= k / 2; d++) for (let i = 0; i < n; i++) edges.push([ids[i], ids[(i + d) % n]]);
   let order = [];
-  if (k === 2) { for (let s = 0; s < 2; s++) for (let i = s; i < n; i += 2) order.push(edges[i]); }
+  if (k === 2 && k < n - 1) { for (let s = 0; s < 2; s++) for (let i = s; i < n; i += 2) order.push(edges[i]); }
   else order = greedyOrder(edges);
   if (conflicts(order) === 0) return order;
   const best = searchOrder(edges);
@@ -924,7 +937,7 @@ function generatePrelim() {
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
   const k = gamesPerTeam(list.length);
-  if (k !== cfg().cupGames) warn(`Com ${list.length} equipes não é possível cada uma jogar ${cfg().cupGames} vezes sem repetir adversário. Gerando com ${k} jogos por equipe.`);
+  if (cfg().cupGames && k !== cfg().cupGames) warn(`Com ${list.length} equipes não é possível cada uma jogar ${cfg().cupGames} vezes sem repetir adversário. Gerando com ${k} jogos por equipe.`);
   const pairs = buildPrelimPairs(list.map(t => t.id), k);
   state.cup = { matches: pairs.map((p, i) => emptyMatch("prelim", i + 1, p[0], p[1])), liveId: null, manualOrder: [] };
   logEv(`Fase preliminar gerada: ${pairs.length} confrontos, ${k} por equipe (${pairs.map(p => `${teamName(p[0])} × ${teamName(p[1])}`).join("; ")})`);
@@ -1640,11 +1653,13 @@ function config() {
         <div><label>Adversário saiu da arena (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupExit}" onchange="setSetting('cupExit',this.value)"></div>
         <div><label>Classificação: vitória / empate / derrota</label><div class="tri"><input type="number" min="0" max="10" value="${s.winPts}" onchange="setSetting('winPts',this.value)" aria-label="Pontos por vitória"><input type="number" min="0" max="10" value="${s.drawPts}" onchange="setSetting('drawPts',this.value)" aria-label="Pontos por empate"><input type="number" min="0" max="10" value="${s.lossPts}" onchange="setSetting('lossPts',this.value)" aria-label="Pontos por derrota"></div></div>
         <div class="full"><label>Fase preliminar</label><select onchange="setSetting('cupGames',this.value)">
-          ${[2, 4, 6].map(k => `<option value="${k}" ${s.cupGames === k ? "selected" : ""} ${k > teams().length - 1 && k > 2 ? "disabled" : ""}>${teams().length * k / 2} confrontos · ${k} jogos por equipe${k === teams().length - 1 ? " (todos contra todos)" : ""}${k > teams().length - 1 && k > 2 ? " — indisponível com " + teams().length + " equipes" : ""}</option>`).join("")}</select>
+          ${(() => { const N = teams().length, all = N * (N - 1) / 2;
+            return `<option value="0" ${s.cupGames === 0 ? "selected" : ""}>${all} confrontos · todos contra todos (${Math.max(0, N - 1)} jogos por equipe) — padrão</option>` +
+              [2, 4, 6].filter(k => k < N - 1).map(k => `<option value="${k}" ${s.cupGames === k ? "selected" : ""}>${N * k / 2} confrontos · ${k} jogos por equipe</option>`).join(""); })()}</select>
           <p class="muted small">Calculado com as ${teams().length} equipes cadastradas.</p>
           ${prelims().length ? `<p class="muted small">A fase preliminar atual tem ${prelims().length} confrontos. A mudança vale ao gerar a fase preliminar novamente.</p>` : ""}</div>
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
-      </div><p class="muted small mt-s">Padrão: 2 jogos por equipe · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
+      </div><p class="muted small mt-s">Padrão: todos contra todos · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
         <label class="check"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
