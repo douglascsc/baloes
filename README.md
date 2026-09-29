@@ -10,21 +10,27 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 ## Telas
 | Tela | Função |
 |---|---|
-| **Início** | Situação atual, próximos da Arena Livre e dos Confrontos, atalhos. |
+| **Início** | Situação atual, próximos da Arena Livre e do Confronto Direto, atalhos. |
 | **Equipes** | Incluir, editar e excluir equipes (nome, escola, robô, professor, integrantes); sorteio da numeração. |
-| **Cores** | Cores dos balões numeradas de 1 a 8: incluir, editar, excluir, restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
+| **Cores** | Cores dos balões numeradas de 1 a 8. O sistema começa com 4 (Vermelho, Azul, Verde, Amarelo); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
-| **Confrontos** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
+| **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
+| **Classificação Geral** | Soma da Arena Livre com os pontos marcados no Confronto Direto (todas as fases, ou só a preliminar, em Configurações). |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
 | **Config.** | Rodadas e tempo da Arena Livre, critérios de desempate, backup (JSON) e reinício. |
 
 ## Arena Livre
-- **Passo 1 — Sorteio das cores:** feito uma única vez, antes de chamar as equipes. Cada equipe recebe uma cor diferente, que vale para todas as rodadas. A cor pode ser ajustada manualmente, e o telão mostra o quadro equipe → cor.
+- **Passo 1 — Sorteio das cores:** feito uma única vez, antes de chamar as equipes. Cada equipe recebe uma cor, que vale para todas as rodadas. As cores só se repetem entre equipes quando há mais equipes que cores: com 4 cores e 7 equipes, cada cor fica com até 2 equipes. A cor pode ser ajustada manualmente, e o telão mostra o quadro equipe → cor.
 - **Passo 2 — Chamar para a arena:** uma equipe por vez, até 4 rodadas (configurável de 1 a 4), 30 s por tentativa.
 - +50 por balão de outra cor · −50 por balão da própria cor · −30 por sair da arena.
 - Toda tentativa começa em **0**. A pontuação é calculada somente a partir das marcações da tentativa.
 - **↶ Desfazer última** e **✕** em cada marcação corrigem erros. Uma tentativa registrada pode ser **anulada** no histórico.
-- Classificação por soma das rodadas (ou melhor rodada, em Configurações). Ela é separada da classificação dos Confrontos.
+- Classificação por soma das rodadas (ou melhor rodada, em Configurações). Ela é separada da classificação do Confronto Direto.
+
+## Classificação Geral
+- **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + pontos marcados no Confronto Direto (+100 por balão, +30 por saída do adversário).
+- **Desempate:** mais pontos no Confronto Direto, depois mais pontos na Arena Livre. Persistindo, decisão da comissão.
+- O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
 - **Fase preliminar:** N equipes → N confrontos (7 equipes → 7 confrontos). Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas.
