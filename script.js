@@ -95,10 +95,9 @@ function defaultSettings() {
     winPts: 3, drawPts: 1, lossPts: 0,
     sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
     beepMid: true, beepMidAt: "10, 5", beepEnd: true,
-    // Com poucos jogos por equipe, as empatadas raramente se enfrentaram: por isso o saldo vem antes
-    // do confronto direto. Com 2 jogos, "Vitórias" não diferencia ninguém (3/1/0).
-    tiebreak: [{ key: "saldo", on: true }, { key: "pro", on: true }, { key: "direto", on: true },
-      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 2
+    // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
+    tiebreak: [{ key: "saldo", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
+      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 4
   };
 }
 function fresh(teamsList) {
@@ -166,8 +165,9 @@ function normalize(raw) {
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
   // Quem ainda usa a ordem padrão antiga (não personalizada) passa para a nova
-  const OLD_TB = "direto1,saldo1,pro1,vitorias0,arena0,sorteio0";
-  if (!(s.settings && s.settings.tbV === 2)) { if (st.tiebreak.map(x => x.key + (x.on ? 1 : 0)).join() === OLD_TB) st.tiebreak = defaultSettings().tiebreak; st.tbV = 2; }
+  // Quem ainda usa uma ordem padrão anterior (não personalizada) passa para a atual
+  const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0"];
+  if (!(s.settings && s.settings.tbV === 4)) { if (OLD_TBS.includes(st.tiebreak.map(x => x.key + (x.on ? 1 : 0)).join())) st.tiebreak = defaultSettings().tiebreak; st.tbV = 4; }
   s.settings = st;
   const ids = new Set(s.teams.map(t => t.id));
   const f = s.free && typeof s.free === "object" ? s.free : {};
