@@ -42,7 +42,8 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)
-Configurável em **Configurações** (ordem e ativação): confronto direto, saldo de pontos, pontos marcados, vitórias, resultado da Arena Livre, numeração do sorteio.
+Configurável em **Configurações** (ordem e ativação). Padrão: **1. saldo de pontos → 2. pontos marcados → 3. confronto direto**. Vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
+Com 2 jogos por equipe, as equipes empatadas raramente se enfrentaram, por isso o confronto direto vem depois do saldo. O número de vitórias não diferencia ninguém nesse formato (3/1/0 com 2 jogos).
 Se o empate persistir entre os 4 primeiros, a classificação mostra ▲▼ para a Comissão definir a ordem antes de gerar as semifinais.
 **Confira e ajuste os critérios conforme o regulamento oficial.**
 

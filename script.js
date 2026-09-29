@@ -61,8 +61,10 @@ function defaultColors() { return DEFAULT_COLORS.map(([name, hex], i) => ({ id: 
 function defaultSettings() {
   return {
     freeRounds: 4, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
-    tiebreak: [{ key: "direto", on: true }, { key: "saldo", on: true }, { key: "pro", on: true },
-      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }]
+    // Com 2 jogos por equipe, as empatadas quase nunca se enfrentaram: por isso o saldo vem antes
+    // do confronto direto. "Vitórias" não diferencia ninguém com 2 jogos (3/1/0).
+    tiebreak: [{ key: "saldo", on: true }, { key: "pro", on: true }, { key: "direto", on: true },
+      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 2
   };
 }
 function fresh(teamsList) {
@@ -113,6 +115,9 @@ function normalize(raw) {
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
+  // Quem ainda usa a ordem padrão antiga (não personalizada) passa para a nova
+  const OLD_TB = "direto1,saldo1,pro1,vitorias0,arena0,sorteio0";
+  if (!(s.settings && s.settings.tbV === 2)) { if (st.tiebreak.map(x => x.key + (x.on ? 1 : 0)).join() === OLD_TB) st.tiebreak = defaultSettings().tiebreak; st.tbV = 2; }
   s.settings = st;
   const ids = new Set(s.teams.map(t => t.id));
   const f = s.free && typeof s.free === "object" ? s.free : {};
