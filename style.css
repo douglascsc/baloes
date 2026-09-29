@@ -297,3 +297,16 @@ body.telao-window #app,body.telao-full #app{display:none}
   .champion-banner h2{font-size:22px}
   #toast{left:14px;right:14px;bottom:78px;text-align:center}
 }
+
+/* Sorteio de cores na fila da Arena Livre */
+.q-color{width:26px;height:26px;border-radius:50%;background:var(--c);color:var(--t);display:grid;place-items:center;font-size:12px;font-weight:900;flex-shrink:0;border:2px solid rgba(0,0,0,.12)}
+.q-color.none{background:#f1f4f2;color:#a2aca6;border-style:dashed}
+.q-draw{padding:8px 12px;border-top:1px solid var(--line2);display:flex;justify-content:flex-end}
+.stage-color.center-flex{justify-content:center;max-width:520px;margin-left:auto;margin-right:auto}
+.stage-color.center-flex .color-pick{margin-left:0}
+.mini-select{width:auto;min-height:32px;padding:4px 8px;font-size:12px;max-width:140px}
+.tv-colors{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2cqw;width:min(90cqw,100%);margin-top:1cqw}
+.tv-ci{display:flex;align-items:center;gap:1cqw;background:#f5f8f6;border-radius:1.2cqw;padding:.8cqw 1.2cqw;text-align:left;border:.2cqw solid transparent}
+.tv-ci.next{border-color:var(--arena);background:var(--arena-l)}
+.tv-ci b{font-size:1.7cqw;flex:1}.tv-ci small{font-size:1.2cqw;color:#7a857f}
+.tv-dot{width:3.4cqw;height:3.4cqw;border-radius:50%;background:var(--c);color:var(--t);display:grid;place-items:center;font-size:1.7cqw;font-weight:950;flex-shrink:0;border:.2cqw solid rgba(0,0,0,.12)}

@@ -67,7 +67,7 @@ function fresh(teamsList) {
     teams: (teamsList || INITIAL_TEAMS).map(t => ({ ...t })),
     colors: defaultColors(),
     settings: defaultSettings(),
-    free: { current: null, attempts: [] },
+    free: { current: null, attempts: [], draws: {} },
     cup: { matches: [], liveId: null, manualOrder: [] },
     display: { mode: "auto", reveal: false }
   };
@@ -115,8 +115,11 @@ function normalize(raw) {
       id: str(a.id) || uid(), teamId: a.teamId, round: Math.max(1, Math.round(num(a.round, 1))),
       color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at)
     })),
-    current: null
+    current: null, draws: {}
   };
+  Object.entries(f.draws && typeof f.draws === "object" ? f.draws : {}).forEach(([tid, c]) => {
+    const cs = normColorSnap(c); if (ids.has(tid) && cs) s.free.draws[tid] = cs;
+  });
   if (f.current && ids.has(f.current.teamId)) {
     s.free.current = { id: str(f.current.id) || uid(), teamId: f.current.teamId, round: Math.max(1, Math.round(num(f.current.round, 1))), color: normColorSnap(f.current.color), events: normEvents(f.current.events), timer: normTimer(f.current.timer, st.freeSeconds) };
   }
@@ -354,7 +357,8 @@ function cores() {
   main().innerHTML = head("Cores dos balões", "Numeradas de 1 a 8. Na Arena Livre, a cor de cada tentativa é sorteada entre estas.",
     `<button class="btn primary" onclick="colorForm()">+ Nova cor</button>`) +
     `<div class="grid g4">${rows || `<div class="empty span-all">Nenhuma cor cadastrada. A Arena Livre precisa de pelo menos uma cor.</div>`}</div>
-     <div class="actions mt"><button class="btn small" onclick="restoreColors()">↻ Restaurar as 8 cores padrão</button></div>`;
+     <div class="actions mt"><button class="btn small" onclick="restoreColors()">↻ Restaurar as 8 cores padrão</button></div>
+     <div class="mt">${teamColorsCard()}</div>`;
 }
 function colorForm(id) {
   const c = id ? state.colors.find(x => x.id === id) : null;
@@ -404,32 +408,58 @@ function freeSummary() {
   return { total, done };
 }
 function currentFreeRound() { const q = freeQueue().find(x => !x.attempt); return q ? q.round : state.settings.freeRounds; }
-function drawColor(exceptId) {
-  const pool = state.colors.filter(c => c.id !== exceptId);
-  const list = pool.length ? pool : state.colors;
-  const c = list[Math.floor(Math.random() * list.length)];
-  return c ? { id: c.id, number: c.number, name: c.name, hex: c.hex } : null;
+/* Sorteio das cores: feito uma vez, ANTES de chamar as equipes. Cada
+   equipe recebe uma cor diferente (quando há cores suficientes), que vale
+   para todas as rodadas da Arena Livre. */
+const snap = c => c ? { id: c.id, number: c.number, name: c.name, hex: c.hex } : null;
+function drawOf(teamId) { return state.free.draws?.[teamId] || null; }
+function allDrawn() { return teams().length > 0 && teams().every(t => drawOf(t.id)); }
+function drawColors() {
+  if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
+  if (!teams().length) return toast("Cadastre as equipes antes.");
+  if (state.free.current) return toast("Há uma equipe na arena. Registre ou cancele a tentativa antes.");
+  const started = state.free.attempts.length > 0, has = teams().some(t => drawOf(t.id));
+  if (has && !confirm(`Sortear novamente as cores de todas as equipes?${started ? "\n\nAs tentativas já registradas mantêm a cor com que foram disputadas; a nova cor vale para as próximas rodadas." : ""}`)) return;
+  if (teams().length > state.colors.length) toast(`Há mais equipes (${teams().length}) que cores (${state.colors.length}): algumas cores vão se repetir.`);
+  let pool = [];
+  while (pool.length < teams().length) pool = pool.concat(shuffle(state.colors));
+  state.free.draws = {};
+  sortedTeams().forEach((t, i) => { state.free.draws[t.id] = snap(pool[i]); });
+  save(); toast("Cores sorteadas — valem para todas as rodadas"); render();
+}
+function drawMissing() {
+  const used = new Set(Object.values(state.free.draws).map(c => c.id));
+  const free = shuffle(state.colors.filter(c => !used.has(c.id)));
+  sortedTeams().filter(t => !drawOf(t.id)).forEach((t, i) => { state.free.draws[t.id] = snap(free[i] || state.colors[Math.floor(Math.random() * state.colors.length)]); });
+  save(); toast("Cores sorteadas para as equipes sem cor"); render();
+}
+function setDrawColor(teamId, colorId) {
+  const c = state.colors.find(x => x.id === colorId); if (!c) return;
+  const other = teams().find(t => t.id !== teamId && drawOf(t.id)?.id === c.id);
+  if (other && !confirm(`A cor ${c.number} (${c.name}) já é de ${other.name}. Usar mesmo assim?`)) return render();
+  state.free.draws[teamId] = snap(c); save(); toast("Cor alterada"); render();
+}
+function teamColorsCard() {
+  const has = teams().some(t => drawOf(t.id)), missing = has && !allDrawn();
+  const rows = sortedTeams().map(t => { const c = drawOf(t.id); return `<div class="q-row">${c ? `<span class="q-color" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</span>` : `<span class="q-color none">?</span>`}${teamCell(t)}${c ? `<select class="mini-select" onchange="setDrawColor('${esc(t.id)}',this.value)" aria-label="Cor de ${esc(t.name)}">${sortedColors().map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? "selected" : ""}>${esc(x.number)} · ${esc(x.name)}</option>`).join("")}</select>` : `<span class="chip wait">sem cor</span>`}</div>`; }).join("");
+  return `<div class="card"><div class="card-head"><h3>🎨 Cores das equipes (Arena Livre)</h3>
+    ${has ? `<button class="btn small ghost" onclick="drawColors()">↻ Sortear de novo</button>` : ""}</div>
+    <p class="muted small">Sorteio único antes de chamar as equipes. A cor vale para todas as rodadas.</p>
+    ${has ? "" : `<button class="btn primary big mt-s" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
+    ${missing ? `<div class="notice warn mt-s">Há equipe sem cor. <button class="btn tiny" onclick="drawMissing()">Sortear para quem falta</button></div>` : ""}
+    <div class="mt-s">${rows}</div></div>`;
 }
 function callTeam(teamId, round) {
   if (state.free.current) return toast("Já existe uma equipe na arena. Registre ou cancele a tentativa atual.");
   if (liveMatch()) return toast("Há um Confronto Direto em andamento. Finalize-o antes.");
   if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
   if (attemptOf(teamId, round)) return toast("Essa tentativa já foi registrada.");
-  const prev = state.free.attempts.filter(a => a.teamId === teamId).sort((a, b) => b.round - a.round)[0];
-  state.free.current = { id: uid(), teamId, round, color: drawColor(prev?.color?.id), events: [], timer: newTimer(state.settings.freeSeconds) };
+  const color = drawOf(teamId);
+  if (!color) return toast("Sorteie as cores das equipes antes de chamar para a arena.");
+  state.free.current = { id: uid(), teamId, round, color, events: [], timer: newTimer(state.settings.freeSeconds) };
   save(); render();
 }
 function callNext() { const n = nextFree(); if (!n) return toast("Todas as tentativas já foram realizadas."); callTeam(n.teamId, n.round); }
-function redrawColor() {
-  const cur = state.free.current; if (!cur) return;
-  if (cur.timer.status !== "idle") return toast("A cor só pode ser trocada antes de iniciar.");
-  cur.color = drawColor(cur.color?.id); save(); render();
-}
-function setColor(id) {
-  const cur = state.free.current, c = state.colors.find(x => x.id === id); if (!cur || !c) return;
-  if (cur.timer.status !== "idle") return toast("A cor só pode ser trocada antes de iniciar.");
-  cur.color = { id: c.id, number: c.number, name: c.name, hex: c.hex }; save(); render();
-}
 function freeToggle() {
   const t = state.free.current?.timer; if (!t) return;
   if (t.status === "running") tPause(t); else if (t.status !== "over") tStart(t);
@@ -485,7 +515,7 @@ function arena() {
     `<div class="mode-banner arena"><b>ARENA LIVRE</b><span>Prova individual — classificação própria, separada do Confronto Direto.</span><span class="pill">${fs.done}/${fs.total} tentativas</span></div>
     <div class="arena-layout">
       <div>${cur ? freeStage(cur) : freeIdle()}</div>
-      <div>${freeQueueCard()}</div>
+      <div>${freeQueueCard()}<div class="mt">${teamColorsCard()}</div></div>
     </div>
     ${freeRankingCard()}`;
 }
@@ -494,23 +524,29 @@ function freeIdle() {
   if (!teams().length) return `<div class="card stage"><div class="empty">Cadastre as equipes para começar.</div></div>`;
   if (!state.colors.length) return `<div class="card stage"><div class="notice warn">Nenhuma cor cadastrada. <button class="btn small" onclick="nav('cores')">Cadastrar cores</button></div></div>`;
   if (!n) return `<div class="card stage center"><div class="big-check">✓</div><h2>Arena Livre concluída</h2><p class="muted">${fs.done} tentativas registradas. Veja a classificação abaixo.</p></div>`;
-  const t = findTeam(n.teamId);
+  const t = findTeam(n.teamId), c = drawOf(n.teamId);
+  if (!c) return `<div class="card stage center">
+    <div class="eyebrow">PASSO 1 DE 2</div>
+    <h2>Sorteio das cores</h2>
+    <p class="muted">Antes de chamar as equipes, sorteie a cor de cada equipe. A cor vale para todas as rodadas.<br>Os balões da cor sorteada são da própria equipe (−50 se estourar).</p>
+    ${teams().some(x => drawOf(x.id)) ? `<button class="btn primary huge mt" onclick="drawMissing()">🎲 Sortear cor para quem falta</button>` : `<button class="btn primary huge mt" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
+  </div>`;
   return `<div class="card stage center">
-    <div class="eyebrow">PRÓXIMA NA ARENA · RODADA ${n.round} DE ${state.settings.freeRounds}</div>
+    <div class="eyebrow">PRÓXIMA NA ARENA · RODADA ${n.round} DE ${state.settings.freeRounds} · PASSO 2 DE 2</div>
     <div class="stage-team">${esc(t.name)}</div><div class="stage-school">${esc(schoolText(t))}</div>
+    <div class="stage-color center-flex"><span class="muted small">COR SORTEADA DA EQUIPE</span>${colorChip(c, true)}
+      </div>
     <button class="btn primary huge mt" onclick="callNext()">📣 Chamar para a arena</button>
-    <p class="muted small mt-s">A cor dos balões da equipe é sorteada ao chamar.</p>
   </div>`;
 }
 function freeStage(cur) {
   const t = findTeam(cur.teamId), tm = cur.timer, total = attemptTotal(cur);
   const toggle = tm.status === "running" ? `⏸ Pausar` : tm.status === "paused" ? `▶ Retomar` : `▶ Iniciar ${state.settings.freeSeconds} s`;
   const statusTxt = { idle: "PRONTA PARA INICIAR", running: "EM ANDAMENTO", paused: "PAUSADA", over: "TEMPO ESGOTADO" }[tm.status];
-  const colorSel = tm.status === "idle" ? `<div class="color-pick"><select onchange="setColor(this.value)" aria-label="Trocar cor">${sortedColors().map(c => `<option value="${esc(c.id)}" ${c.id === cur.color?.id ? "selected" : ""}>Cor ${esc(c.number)} · ${esc(c.name)}</option>`).join("")}</select><button class="btn small" onclick="redrawColor()">🎲 Sortear outra</button></div>` : "";
   return `<div class="card stage live-${tm.status}">
     <div class="stage-top"><span class="pill">RODADA ${cur.round} DE ${state.settings.freeRounds}</span><span class="pill">${teamNo(t)}</span></div>
     <div class="stage-team">${esc(t.name)}</div><div class="stage-school">${esc(schoolText(t))}</div>
-    <div class="stage-color"><span class="muted small">COR DA EQUIPE (própria)</span>${colorChip(cur.color, true)}${colorSel}</div>
+    <div class="stage-color"><span class="muted small">COR DA EQUIPE (própria)</span>${colorChip(cur.color, true)}</div>
     <div class="stage-mid">
       <div><div class="timer" data-timer="free">${fmt(left(tm))}</div><div class="status-txt s-${tm.status}">${tm.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</div></div>
       <div class="stage-score"><span>PONTOS</span><b class="${total < 0 ? "minus" : ""}">${signed(total)}</b></div>
@@ -537,9 +573,10 @@ function freeQueueCard() {
       else if (x.attempt) chip = `<span class="chip done">✓ ${reveal ? signed(attemptTotal(x.attempt)) : "Jogou"}</span>`;
       else {
         chip = next && next.teamId === x.teamId && next.round === r ? `<span class="chip next">Próxima</span>` : `<span class="chip wait">Na fila</span>`;
-        if (!cur) act = `<button class="btn tiny" onclick="callTeam('${esc(x.teamId)}',${r})">Chamar</button>`;
+        if (!cur && drawOf(x.teamId)) act = `<button class="btn tiny" onclick="callTeam('${esc(x.teamId)}',${r})">Chamar</button>`;
       }
-      return `<div class="q-row ${x.current ? "is-live" : ""}">${teamCell(t)}${chip}${act}</div>`;
+      const dc = x.attempt ? x.attempt.color : x.current ? state.free.current.color : drawOf(x.teamId);
+      return `<div class="q-row ${x.current ? "is-live" : ""}">${dc ? `<span class="q-color" title="Cor ${esc(dc.number)} · ${esc(dc.name)}" style="--c:${esc(dc.hex)};--t:${textOn(dc.hex)}">${esc(dc.number)}</span>` : `<span class="q-color none" title="Cor não sorteada">?</span>`}${teamCell(t)}${chip}${act}</div>`;
     }).join("");
     html += `<details class="q-round" ${r === cr ? "open" : ""}><summary><b>Rodada ${r}</b><span class="muted">${done}/${items.length}</span></summary>${rows || `<div class="muted small">Sem equipes.</div>`}</details>`;
   }
@@ -998,7 +1035,7 @@ function telaoScene() {
   const nf = nextFree(), nm = nextMatch();
   return `<div class="tv tv-idle"><img src="assets/robosapiens.png" alt="RoboSapiens" class="tv-logo"><div class="tv-title">Robô Estoura Balão</div>
     <div class="tv-next">${nm && prelims().some(m => m.status !== "pending") || (nm && !nf) ? `<span>PRÓXIMO CONFRONTO</span><b>${esc(teamName(nm.a))} × ${esc(teamName(nm.b))}</b><small>${esc(matchLabel(nm))}</small>`
-      : nf ? `<span>PRÓXIMA NA ARENA LIVRE · RODADA ${nf.round}</span><b>${esc(teamName(nf.teamId))}</b><small>${esc(schoolText(findTeam(nf.teamId)))}</small>` : `<span>AGUARDE</span><b>Em instantes</b>`}</div></div>`;
+      : nf ? `<span>PRÓXIMA NA ARENA LIVRE · RODADA ${nf.round}</span><b>${esc(teamName(nf.teamId))}</b><small>${esc(schoolText(findTeam(nf.teamId)))}</small>${drawOf(nf.teamId) ? `<small>${colorChip(drawOf(nf.teamId))}</small>` : ""}` : `<span>AGUARDE</span><b>Em instantes</b>`}</div>${nf && teams().some(t => drawOf(t.id)) && !(nm && prelims().some(m => m.status !== "pending")) ? `<div class="tv-colors">${sortedTeams().map(t => { const c = drawOf(t.id); return c ? `<div class="tv-ci ${nf.teamId === t.id ? "next" : ""}"><span class="tv-dot" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</span><b>${esc(t.name)}</b><small>${esc(c.name)}</small></div>` : ""; }).join("")}</div>` : ""}</div>`;
 }
 function sceneFree(cur) {
   const t = findTeam(cur.teamId), total = attemptTotal(cur), tm = cur.timer;
@@ -1132,7 +1169,7 @@ function importData(e) {
   };
   r.readAsText(file);
 }
-function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [] }; save(); toast("Arena Livre zerada"); render(); }
+function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [], draws: {} }; save(); toast("Arena Livre zerada"); render(); }
 function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) return; state.cup = { matches: [], liveId: null, manualOrder: [] }; save(); toast("Confrontos zerados"); render(); }
 function resetAll() { if (!confirm("Apagar tudo e voltar ao cadastro inicial das equipes?")) return; state = normalize(fresh()); save(); toast("Competição reiniciada"); render(); }
 

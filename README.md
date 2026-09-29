@@ -12,14 +12,15 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 |---|---|
 | **Início** | Situação atual, próximos da Arena Livre e dos Confrontos, atalhos. |
 | **Equipes** | Incluir, editar e excluir equipes (nome, escola, robô, professor, integrantes); sorteio da numeração. |
-| **Cores** | Cores dos balões numeradas de 1 a 8: incluir, editar, excluir, restaurar o padrão. |
-| **Arena Livre** | Tudo da Arena Livre numa tela só: fila por rodada, chamada da equipe (a cor é sorteada), cronômetro, pontuação, desfazer, classificação. |
+| **Cores** | Cores dos balões numeradas de 1 a 8: incluir, editar, excluir, restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
+| **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confrontos** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
 | **Config.** | Rodadas e tempo da Arena Livre, critérios de desempate, backup (JSON) e reinício. |
 
 ## Arena Livre
-- Uma equipe por vez, até 4 rodadas (configurável de 1 a 4), 30 s por tentativa.
+- **Passo 1 — Sorteio das cores:** feito uma única vez, antes de chamar as equipes. Cada equipe recebe uma cor diferente, que vale para todas as rodadas. A cor pode ser ajustada manualmente, e o telão mostra o quadro equipe → cor.
+- **Passo 2 — Chamar para a arena:** uma equipe por vez, até 4 rodadas (configurável de 1 a 4), 30 s por tentativa.
 - +50 por balão de outra cor · −50 por balão da própria cor · −30 por sair da arena.
 - Toda tentativa começa em **0**. A pontuação é calculada somente a partir das marcações da tentativa.
 - **↶ Desfazer última** e **✕** em cada marcação corrigem erros. Uma tentativa registrada pode ser **anulada** no histórico.
