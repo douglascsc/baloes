@@ -43,13 +43,13 @@ const DEFAULT_COLORS = [
 ];
 
 const INITIAL_TEAMS = [
-  { id: "byte-force", number: 1, name: "Byte Force", school: "Senai RS", robot: "Gaara", members: "Antônia Pires Beckenkamp · Pietro Chiele Ott · Samuel Appolo · Sarah Zamin Sant'Anna", professor: "Francisco da Silva Brandão" },
-  { id: "metalbots", number: 2, name: "MetalBots", school: "Senai RS", robot: "Zóio", members: "Isaque da Silva Simon · Braian de Oliveira Pereira · Vitor Scapin · Yasmin Borges Bittencort", professor: "Renata Taís Lunkes" },
-  { id: "equipe-decio", number: 3, name: "Equipe Décio", school: "CME Dr. Décio Gomes Pereira - UEB", robot: "Gladiador", members: "Lucas Matheus Sartori da Silva · Peterson Phorlan Blankenhiem Alves · Asafe Junior Mendez dos Reis Schoenardie · Want Arthur Haag", professor: "Marco Joel Berghan" },
-  { id: "ayrton-bots", number: 4, name: "Ayrton Bots", school: "CME Ayrton Senna - UEB", robot: "Gladiador", members: "Rebecca Karloh Soares · Luiz Henrique dos Santos Pescador · Miguel Abbady Flôr Machado · Brayan Gustavo Soares dos Santos", professor: "Elci Uylson Farias Ferreira" },
-  { id: "robotech-pastor3", number: 5, name: "RoboTech Pastor3", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor3", members: "Eduarda Deobald Girelli · Felipe Wauskiez Schimitt · Gustavo Lupschinski Wendling · Mateus Gabriel Kuhn Blaszczekievicz", professor: "Eliana Kuhn Blaszczekievicz" },
-  { id: "robotech-pastor1", number: 6, name: "RoboTech Pastor1", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor1", members: "João Affonso Felin · Gustavo Mendes dos Reis · Murilo Eduardo Gabriele · Victor Trintin Petry", professor: "Eliana Kuhn Blaszczekievicz" },
-  { id: "robotech-pastor2", number: 7, name: "RoboTech Pastor2", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor2", members: "Artur Traichel Hendges · Pyetro Augusto Siebert Wiedemann · Leonardo Bergmann Garcia Oliveira · Gabriel da Silva Gulart", professor: "Eliana Kuhn Blaszczekievicz" }
+  { id: "byte-force", number: null, name: "Byte Force", school: "Senai RS", robot: "Gaara", members: "Antônia Pires Beckenkamp · Pietro Chiele Ott · Samuel Appolo · Sarah Zamin Sant'Anna", professor: "Francisco da Silva Brandão" },
+  { id: "metalbots", number: null, name: "MetalBots", school: "Senai RS", robot: "Zóio", members: "Isaque da Silva Simon · Braian de Oliveira Pereira · Vitor Scapin · Yasmin Borges Bittencort", professor: "Renata Taís Lunkes" },
+  { id: "equipe-decio", number: null, name: "Equipe Décio", school: "CME Dr. Décio Gomes Pereira - UEB", robot: "Gladiador", members: "Lucas Matheus Sartori da Silva · Peterson Phorlan Blankenhiem Alves · Asafe Junior Mendez dos Reis Schoenardie · Want Arthur Haag", professor: "Marco Joel Berghan" },
+  { id: "ayrton-bots", number: null, name: "Ayrton Bots", school: "CME Ayrton Senna - UEB", robot: "Gladiador", members: "Rebecca Karloh Soares · Luiz Henrique dos Santos Pescador · Miguel Abbady Flôr Machado · Brayan Gustavo Soares dos Santos", professor: "Elci Uylson Farias Ferreira" },
+  { id: "robotech-pastor3", number: null, name: "RoboTech Pastor3", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor3", members: "Eduarda Deobald Girelli · Felipe Wauskiez Schimitt · Gustavo Lupschinski Wendling · Mateus Gabriel Kuhn Blaszczekievicz", professor: "Eliana Kuhn Blaszczekievicz" },
+  { id: "robotech-pastor1", number: null, name: "RoboTech Pastor1", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor1", members: "João Affonso Felin · Gustavo Mendes dos Reis · Murilo Eduardo Gabriele · Victor Trintin Petry", professor: "Eliana Kuhn Blaszczekievicz" },
+  { id: "robotech-pastor2", number: null, name: "RoboTech Pastor2", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor2", members: "Artur Traichel Hendges · Pyetro Augusto Siebert Wiedemann · Leonardo Bergmann Garcia Oliveira · Gabriel da Silva Gulart", professor: "Eliana Kuhn Blaszczekievicz" }
 ];
 
 /* ============================ ESTADO ============================ */
@@ -82,7 +82,7 @@ const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n :
 
 function normTeam(t, i) {
   return {
-    id: str(t.id) || uid(), number: Math.max(1, Math.round(num(t.number, i + 1))),
+    id: str(t.id) || uid(), number: Number.isFinite(Number(t.number)) && Number(t.number) >= 1 && t.number !== null && t.number !== "" ? Math.round(Number(t.number)) : null,
     name: str(t.name) || `Equipe ${String(i + 1).padStart(2, "0")}`, school: str(t.school),
     robot: str(t.robot), professor: str(t.professor), members: str(t.members)
   };
@@ -221,11 +221,15 @@ function elapsed(t) { return fmt(t.duration - left(t)); }
 
 /* ============================ EQUIPES / CORES ============================ */
 const teams = () => state.teams;
-const sortedTeams = () => [...state.teams].sort((a, b) => a.number - b.number || a.name.localeCompare(b.name));
+// Equipes sem numeração (antes do sorteio) ficam por último, em ordem alfabética
+const numKey = t => (t && t.number) ? t.number : 1e9;
+const byNum = (a, b) => numKey(a) - numKey(b) || a.name.localeCompare(b.name);
+const sortedTeams = () => [...state.teams].sort(byNum);
 const findTeam = id => state.teams.find(t => t.id === id) || null;
 const teamName = (id, fb = "A definir") => findTeam(id)?.name || fb;
 const schoolText = t => t && t.school ? t.school : "Escola não informada";
-const teamNo = t => `Equipe ${pad2(t?.number)}`;
+const teamNo = t => t?.number ? `Equipe ${pad2(t.number)}` : "Equipe XX";
+const noLabel = t => t?.number ? pad2(t.number) : "XX";
 const sortedColors = () => [...state.colors].sort((a, b) => a.number - b.number);
 function colorChip(c, big = false) {
   if (!c) return `<span class="muted">Sem cor</span>`;
@@ -308,7 +312,8 @@ function equipes() {
       <div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button><button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>
     </div>`).join("");
   main().innerHTML = head("Equipes", `${teams().length} equipes cadastradas.`,
-    `<button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
+    `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
+    (teams().length && !teams().every(t => t.number) ? `<div class="notice mb">Equipes sem numeração aparecem como <b>Equipe XX</b>. Use <b>🎲 Sortear numeração</b> antes de gerar os confrontos.</div>` : "") +
     (started ? `<div class="notice warn mb">A competição já começou. Alterar nomes é seguro; excluir equipes ou refazer o sorteio pode exigir reiniciar etapas.</div>` : "") +
     `<div class="grid g3">${cards || `<div class="empty span-all">Nenhuma equipe cadastrada. Clique em <b>+ Nova equipe</b>.</div>`}</div>`;
 }
@@ -321,21 +326,25 @@ function teamForm(id) {
       <div><label>Robô</label><input name="robot" maxlength="60" value="${esc(t?.robot)}"></div>
       <div><label>Professor(a) orientador(a)</label><input name="professor" maxlength="80" value="${esc(t?.professor)}"></div>
       <div class="full"><label>Integrantes (separe por · ou vírgula)</label><input name="members" maxlength="400" value="${esc(t?.members)}"></div>
-      <div><label>Numeração</label><input name="number" type="number" min="1" max="99" value="${t ? t.number : nextNumber()}"></div>
+      <div><label>Numeração (vazio = Equipe XX, até o sorteio)</label><input name="number" type="number" min="1" max="99" placeholder="XX" value="${t?.number ?? ""}"></div>
     </div>
     <div class="actions mt"><button class="btn primary big">Salvar</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   document.getElementById("teamF").onsubmit = e => {
     e.preventDefault(); const f = new FormData(e.target);
-    const data = { name: str(f.get("name")), school: str(f.get("school")), robot: str(f.get("robot")), professor: str(f.get("professor")), members: str(f.get("members")), number: Math.max(1, Math.round(num(f.get("number"), nextNumber()))) };
+    const data = { name: str(f.get("name")), school: str(f.get("school")), robot: str(f.get("robot")), professor: str(f.get("professor")), members: str(f.get("members")), number: str(f.get("number")) ? Math.max(1, Math.round(num(f.get("number"), 1))) : null };
     if (!data.name || !data.school) return toast("Informe o nome da equipe e da escola.");
     if (teams().some(x => x !== t && x.name.toLowerCase() === data.name.toLowerCase())) return toast("Já existe uma equipe com esse nome.");
-    if (teams().some(x => x !== t && x.number === data.number)) return toast(`A numeração ${pad2(data.number)} já está em uso.`);
+    if (data.number && teams().some(x => x !== t && x.number === data.number)) return toast(`A numeração ${pad2(data.number)} já está em uso.`);
     if (t) Object.assign(t, data); else state.teams.push({ id: uid(), ...data });
     save(); closeModal(); toast(t ? "Equipe atualizada" : "Equipe adicionada"); render();
   };
 }
 const editTeam = id => teamForm(id);
-function nextNumber() { return Math.max(0, ...teams().map(t => t.number)) + 1; }
+function clearNumbers() {
+  if (!teams().some(t => t.number)) return toast("As equipes já estão sem numeração.");
+  if (!confirm("Remover a numeração de todas as equipes? Elas voltam a aparecer como “Equipe XX” até um novo sorteio.")) return;
+  teams().forEach(t => { t.number = null; }); save(); toast("Numeração removida"); render();
+}
 function deleteTeam(id) {
   const t = findTeam(id); if (!t) return;
   if (state.free.current?.teamId === id) return toast("A equipe está na arena agora. Cancele a tentativa antes.");
@@ -515,7 +524,7 @@ function freeRanking() {
     const vals = scores.filter(v => v !== null);
     const sum = vals.reduce((s, v) => s + v, 0), best = vals.length ? Math.max(...vals) : 0;
     return { team: t, scores, done: vals.length, sum, best, total: state.settings.freeRankMode === "melhor" ? best : sum };
-  }).sort((a, b) => b.total - a.total || b.best - a.best || b.sum - a.sum || a.team.number - b.team.number);
+  }).sort((a, b) => b.total - a.total || b.best - a.best || b.sum - a.sum || byNum(a.team, b.team));
 }
 
 /* ============================ TELA: ARENA LIVRE ============================ */
@@ -595,7 +604,7 @@ function freeQueueCard() {
 }
 function freeRankingCard() {
   const R = state.settings.freeRounds, rk = freeRanking();
-  const rows = (reveal ? rk : [...rk].sort((a, b) => a.team.number - b.team.number)).map((x, i) => `<tr>
+  const rows = (reveal ? rk : [...rk].sort((a, b) => byNum(a.team, b.team))).map((x, i) => `<tr>
       <td class="pos">${reveal ? `${i + 1}º` : "–"}</td><td>${teamCell(x.team)}</td>
       ${x.scores.map(v => `<td class="num">${v === null ? `<span class="muted">—</span>` : hide(signed(v), v < 0 ? "minus" : "")}</td>`).join("")}
       <td class="num total">${x.done ? hide(signed(x.total), x.total < 0 ? "minus" : "") : `<span class="muted">—</span>`}</td></tr>`).join("");
@@ -675,6 +684,7 @@ function emptyMatch(stage, order, a, b) {
 function generatePrelim() {
   const list = sortedTeams();
   if (list.length < 4) return toast("São necessárias pelo menos 4 equipes.");
+  if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
   const pairs = buildPrelimPairs(list.map(t => t.id));
   state.cup = { matches: pairs.map((p, i) => emptyMatch("prelim", i + 1, p[0], p[1])), liveId: null, manualOrder: [] };
@@ -709,7 +719,7 @@ function critValue(key, s, group) {
   if (key === "pro") return s.PM;
   if (key === "vitorias") return s.V;
   if (key === "arena") return freeRanking().find(r => r.team.id === s.team.id)?.total || 0;
-  if (key === "sorteio") return -s.team.number;
+  if (key === "sorteio") return -numKey(s.team);
   return 0;
 }
 function splitBy(group, crits) {
@@ -730,7 +740,7 @@ function standings() {
   byPts.forEach(s => { const g = groups[groups.length - 1]; if (g && g[0].P === s.P) g.push(s); else groups.push([s]); });
   const mo = state.cup.manualOrder, rows = [];
   groups.flatMap(g => splitBy(g, crits)).forEach(part => {
-    let list = [...part.list].sort((a, b) => a.team.number - b.team.number), tied = part.tied, manual = false;
+    let list = [...part.list].sort((a, b) => byNum(a.team, b.team)), tied = part.tied, manual = false;
     if (tied && list.every(s => mo.includes(s.team.id))) { list.sort((a, b) => mo.indexOf(a.team.id) - mo.indexOf(b.team.id)); tied = false; manual = true; }
     const gid = list.map(s => s.team.id).join("|");
     list.forEach(s => rows.push({ ...s, tied, manual, gid, groupSize: list.length }));
@@ -1002,7 +1012,7 @@ function teamStatus(id, rows) {
 }
 function standingsCard() {
   const rows = standings(), done = prelimDone(), crits = state.settings.tiebreak.filter(x => x.on).map(x => TIEBREAKS[x.key].label);
-  const list = reveal ? rows : [...rows].sort((a, b) => a.team.number - b.team.number);
+  const list = reveal ? rows : [...rows].sort((a, b) => byNum(a.team, b.team));
   const body = list.map(r => {
     const cls = reveal && done ? (r.pos <= 4 ? "qual" : "elim") : "";
     const arrows = reveal && done && r.tied ? `<span class="tie-arrows"><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',-1)" title="Subir">▲</button><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',1)" title="Descer">▼</button></span>` : "";
@@ -1045,14 +1055,14 @@ function generalRanking() {
   return sortedTeams().map(t => {
     const arena = fr.find(r => r.team.id === t.id)?.total || 0, cup = cupPointsOf(t.id);
     return { team: t, arena, cup, total: arena + cup };
-  }).sort((a, b) => b.total - a.total || b.cup - a.cup || b.arena - a.arena || a.team.number - b.team.number);
+  }).sort((a, b) => b.total - a.total || b.cup - a.cup || b.arena - a.arena || byNum(a.team, b.team));
 }
 function geral() {
-  const rk = generalRanking(), list = reveal ? rk : [...rk].sort((a, b) => a.team.number - b.team.number);
+  const rk = generalRanking(), list = reveal ? rk : [...rk].sort((a, b) => byNum(a.team, b.team));
   const medal = i => reveal ? (["🥇", "🥈", "🥉"][i] || "") : "";
   const fs = freeSummary(), cs = cupSummary();
   const ties = reveal ? rk.map((r, i) => i > 0 && rk[i - 1].total === r.total && rk[i - 1].cup === r.cup && rk[i - 1].arena === r.arena) : [];
-  main().innerHTML = head("🏆 Classificação Geral", "Soma da pontuação da Arena Livre com os pontos marcados no Confronto Direto.", `${eyeBtn()}<button class="btn" onclick="setDisplay('geral');openTelaoWindow()">📺 Mostrar no telão</button>`) +
+  main().innerHTML = head("🏆 Classificação Geral", "Soma da pontuação da Arena Livre com os pontos marcados no Confronto Direto.", `${eyeBtn()}<button class="btn" onclick="setDisplay('geral');openTelaoWindow()">📺 Mostrar no telão</button><button class="btn" onclick="exportXlsx()">📊 Exportar Excel</button>`) +
     `<div class="grid g2 mb"><div class="notice"><b>🎈 Arena Livre</b> — ${state.settings.freeRankMode === "melhor" ? "melhor rodada" : "soma das rodadas"} · ${fs.done}/${fs.total} tentativas</div>
       <div class="notice cup"><b>⚔️ Confronto Direto</b> — pontos marcados (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"}) · ${cs.done}/${cs.total || 0} confrontos</div></div>
     ${fs.done < fs.total || !cs.total || cs.done < cs.total ? `<div class="notice warn mb">Classificação parcial — ainda há provas a disputar.</div>` : ""}
@@ -1176,6 +1186,115 @@ function renderTelaoWindow() {
   updateTimers();
 }
 
+/* ============================ PLANILHA EXCEL (.xlsx) ============================ */
+/* Gera o .xlsx no próprio navegador (sem internet e sem bibliotecas):
+   planilhas em XML (Office Open XML) empacotadas num ZIP sem compressão. */
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files, type) {
+  const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
+  const d = new Date(), time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  files.forEach(f => {
+    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, time, true); h.setUint16(12, date, true); h.setUint32(14, crc, true); h.setUint32(18, data.length, true);
+    h.setUint32(22, data.length, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    parts.push(new Uint8Array(h.buffer), name, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, time, true); c.setUint16(14, date, true); c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true);
+    c.setUint16(28, name.length, true); c.setUint16(30, 0, true); c.setUint16(32, 0, true); c.setUint16(34, 0, true); c.setUint16(36, 0, true);
+    c.setUint32(38, 0, true); c.setUint32(42, offset, true);
+    central.push(new Uint8Array(c.buffer), name);
+    offset += 30 + name.length + data.length;
+  });
+  const size = central.reduce((s, a) => s + a.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type });
+}
+function xesc(v) { return String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function colName(i) { let s = ""; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function sheetXml(rows) {
+  const ncol = Math.max(1, ...rows.map(r => r.length));
+  const widths = Array.from({ length: ncol }, (_, c) => Math.min(60, Math.max(8, ...rows.map(r => String(r[c] ?? "").length + 2))));
+  const body = rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => {
+    if (v === null || v === undefined || v === "") return "";
+    const ref = `${colName(ci)}${ri + 1}`, st = ri === 0 ? ' s="1"' : "";
+    return typeof v === "number" && Number.isFinite(v) ? `<c r="${ref}"${st}><v>${v}</v></c>` : `<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
+  }).join("")}</row>`).join("");
+  const last = `${colName(ncol - 1)}${Math.max(1, rows.length)}`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols><sheetData>${body}</sheetData>${rows.length > 1 ? `<autoFilter ref="A1:${last}"/>` : ""}</worksheet>`;
+}
+function buildXlsx(sheets) {
+  const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xesc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0F7A3A"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const types = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`;
+  const root = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  return zipStore([
+    { name: "[Content_Types].xml", data: types }, { name: "_rels/.rels", data: root },
+    { name: "xl/workbook.xml", data: wb }, { name: "xl/_rels/workbook.xml.rels", data: rels }, { name: "xl/styles.xml", data: styles },
+    ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXml(s.rows) }))
+  ], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+const stageName = m => ({ prelim: "Fase preliminar", semi: "Semifinal", final: "Final" })[m.stage];
+const matchName = m => m.stage === "prelim" ? `Confronto ${m.order}` : m.stage === "semi" ? `Semifinal ${m.order}` : "Final";
+const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("pt-BR"); };
+function resultSheets() {
+  const R = state.settings.freeRounds, fs = freeSummary(), cs = cupSummary(), champ = champion(), f = finalMatch();
+  const vice = f && winnerOf(f) ? findTeam(winnerOf(f) === f.a ? f.b : f.a) : null;
+  const gr = generalRanking(), st = standings(), fr = freeRanking(), done = prelimDone();
+  const crits = state.settings.tiebreak.filter(x => x.on).map(x => TIEBREAKS[x.key].label).join(" → ") || "nenhum";
+  const count = (a, pts) => a.events.filter(e => e.pts === pts).length;
+  const situation = id => {
+    if (champ && champ.id === id) return "Campeão";
+    if (vice && vice.id === id) return "Vice-campeão";
+    if (semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id)) return "Semifinalista";
+    if (semis().length) return semis().some(m => m.a === id || m.b === id) ? (f ? "Finalista" : "Semifinalista") : "Eliminado na fase preliminar";
+    return done ? "" : "Em disputa";
+  };
+  const allMatches = matches();
+  return [
+    { name: "Resumo", rows: [["Item", "Valor"],
+      ["Competição", "RoboSapiens 2026 — Robô Estoura Balão"], ["Exportado em", new Date().toLocaleString("pt-BR")],
+      ["Equipes", teams().length], ["Cores de balão cadastradas", state.colors.length],
+      ["Arena Livre — rodadas por equipe", R], ["Arena Livre — tentativas registradas", `${fs.done} de ${fs.total}`],
+      ["Arena Livre — critério da classificação", state.settings.freeRankMode === "melhor" ? "Melhor rodada" : "Soma das rodadas"],
+      ["Arena Livre — 1º lugar", fs.done ? fr[0]?.team.name || "" : "A definir"],
+      ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
+      ["Confronto Direto — pontuação", "Vitória 3 · Empate 1 · Derrota 0"], ["Confronto Direto — desempate", `${crits} → decisão da comissão`],
+      ["Campeão (Confronto Direto)", champ ? champ.name : "A definir"], ["Vice-campeão (Confronto Direto)", vice ? vice.name : "A definir"],
+      ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"})`],
+      ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
+    { name: "Equipes", rows: [["Nº", "Equipe", "Escola", "Robô", "Professor(a)", "Integrantes", "Cor Arena Livre (nº)", "Cor Arena Livre"],
+      ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
+    { name: "Arena - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", ...Array.from({ length: R }, (_, i) => `Rodada ${i + 1}`), "Tentativas", "Soma", "Melhor rodada", state.settings.freeRankMode === "melhor" ? "Pontuação (melhor rodada)" : "Pontuação (soma)"],
+      ...fr.map((x, i) => [i + 1, noLabel(x.team), x.team.name, schoolText(x.team), ...x.scores.map(v => v === null ? "" : v), x.done, x.sum, x.done ? x.best : "", x.total])] },
+    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor (nº)", "Cor", "Balões de outra cor (+50)", "Balões da própria cor (−50)", "Saídas da arena (−30)", "Pontos", "Registrado em"],
+      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.number ?? "", a.color?.name ?? "", count(a, 50), count(a, -50), count(a, -30), attemptTotal(a), fmtDate(a.at)]; })] },
+    { name: "Arena - Marcações", rows: [["Rodada", "Equipe", "Escola", "Tempo", "Evento", "Pontos"],
+      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).flatMap(a => { const t = findTeam(a.teamId); return a.events.map(e => [a.round, t?.name || "Equipe removida", schoolText(t), e.t, e.label, e.pts]); })] },
+    { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Situação"],
+      ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin ? sideScore(m, "b") : "", fin ? (m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar"]; })] },
+    { name: "Confronto - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", "Jogos", "Vitórias", "Empates", "Derrotas", "Pontos marcados", "Pontos sofridos", "Saldo", "Pontos (3/1/0)", "Situação"],
+      ...st.map(r => [r.pos, noLabel(r.team), r.team.name, schoolText(r.team), r.J, r.V, r.E, r.D, r.PM, r.PS, r.SG, r.P, situation(r.team.id) || (done ? (r.pos <= 4 ? "Classificado para a semifinal" : "Eliminado na fase preliminar") : "")])] },
+    { name: "Confronto - Marcações", rows: [["Fase", "Confronto", "Round", "Tempo", "Equipe", "Escola", "Evento", "Pontos"],
+      ...allMatches.filter(m => m.status === "done").flatMap(m => [1, 2].flatMap(r => m.rounds[r].events.map(e => { const t = findTeam(e.side === "a" ? m.a : m.b); return [stageName(m), matchName(m), r, e.t, t?.name || "", schoolText(t), e.label, e.pts]; })))] },
+    { name: "Classificação Geral", rows: [["Posição", "Nº", "Equipe", "Escola", "Arena Livre", "Confronto Direto (pontos marcados)", "Total"],
+      ...gr.map((r, i) => [i + 1, noLabel(r.team), r.team.name, schoolText(r.team), r.arena, r.cup, r.total])] }
+  ];
+}
+function exportXlsx() {
+  try {
+    const blob = buildXlsx(resultSheets());
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `robosapiens-estoura-baloes-resultados-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    toast("Planilha exportada");
+  } catch (e) { console.error(e); toast("Não foi possível gerar a planilha"); }
+}
+
 /* ============================ CONFIGURAÇÕES ============================ */
 function config() {
   const s = state.settings;
@@ -1190,6 +1309,7 @@ function config() {
         <div class="full"><label class="check"><input type="checkbox" ${s.freeMinZero ? "checked" : ""} onchange="setSetting('freeMinZero',this.checked)"> Não permitir pontuação negativa em uma tentativa (mínimo 0)</label></div>
       </div><p class="muted small mt-s">Confirme essas opções com o regulamento da competição.</p></div>
       <div class="card"><h3>⚔️ Critérios de desempate (Confronto Direto)</h3><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
+      <div class="card"><h3>📊 Planilha de resultados</h3><p class="muted small">Arquivo Excel (.xlsx) com todas as etapas: equipes, Arena Livre (classificação, tentativas e cada marcação), Confronto Direto (jogos, classificação e cada marcação) e Classificação Geral.</p><div class="actions mt-s"><button class="btn primary" onclick="exportXlsx()">📊 Exportar planilha (Excel)</button></div></div>
       <div class="card"><h3>💾 Backup</h3><div class="actions"><button class="btn primary" onclick="exportData()">⬇ Exportar JSON</button><label class="btn file">⬆ Importar JSON<input id="importFile" type="file" accept=".json,application/json" hidden></label></div><p class="muted small mt-s">Os dados ficam salvos neste navegador. Exporte um backup ao final de cada etapa.</p></div>
       <div class="card"><h3>⚠️ Reiniciar</h3><div class="actions col">
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
