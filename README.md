@@ -48,3 +48,20 @@ A versão anterior acumulava pontos em campos gravados no navegador (`freePoints
 Agora nenhuma pontuação é armazenada como acumulador: tudo é recalculado a partir das marcações. Na primeira abertura, só o cadastro das equipes da versão anterior é aproveitado.
 
 Base: Regulamento Geral RoboSapiens 2026, seção 5.
+
+## Dois computadores: um registra, outro exibe o telão (rede local)
+Não precisa de internet nem de banco de dados: os dois PCs só precisam estar na **mesma rede** (roteador, cabo de rede ou o roteador do celular).
+
+**Só uma vez, no PC que registra:** instale o Python 3 (https://www.python.org/downloads/ e marque *Add python.exe to PATH*, ou pela Microsoft Store).
+
+**No dia:**
+1. No PC que registra, dê dois cliques em **`iniciar-servidor.bat`**. Uma janela preta mostra os endereços, e o sistema abre sozinho em `http://localhost:8000`. **Deixe a janela preta aberta.**
+   - Se o Windows perguntar sobre o firewall, clique em **Permitir acesso** (redes privadas).
+2. No PC do telão, abra no navegador o endereço mostrado, por exemplo `http://192.168.0.10:8000`. Ele abre direto no telão, **somente leitura**, e atualiza sozinho. Dê duplo clique para tela cheia.
+3. No topo do sistema aparece **🟢 Telão em rede**. A tela **Telão** também mostra o endereço.
+
+- Só o PC que registra consegue alterar os dados. O cronômetro do telão é sincronizado com o do PC de registro.
+- Cópia automática a cada alteração: `dados-competicao.json`, na pasta do sistema.
+- Se a rede cair, o registro continua normalmente. O telão mostra um aviso e volta sozinho quando a conexão retornar.
+- Rede da escola bloqueando a comunicação entre computadores? Use o roteador do celular ou um cabo de rede direto entre os dois PCs.
+- No Mac ou Linux, use `python3 servidor.py` no lugar do `.bat`.

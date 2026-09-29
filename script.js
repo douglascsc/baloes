@@ -8,7 +8,12 @@
 
 const KEY = "robosapiens_estoura_baloes_v3";
 const OLD_KEY = "robosapiens_estoura_baloes_v2";
-const TELAO_WINDOW = location.hash === "#telao";
+// Janela só de exibição: "#telao" ou outro PC acessando pela rede local
+let TELAO_WINDOW = location.hash === "#telao";
+
+/* Modo rede local (servidor.py): o PC que registra envia o estado ao
+   servidor; o PC do telão consulta o servidor e atualiza sozinho. */
+const NET = { on: false, local: false, urls: [], rev: 0, offset: 0, ok: true, lastOk: 0, timer: null, busy: false, again: false };
 
 /* ---------- Regras (Regulamento RoboSapiens 2026, seção 5) ---------- */
 const FREE_EVENTS = [
@@ -169,6 +174,7 @@ let state = load();
 function save() {
   if (TELAO_WINDOW) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar no navegador"); }
+  if (NET.on && NET.local) { clearTimeout(NET.timer); NET.timer = setTimeout(pushState, 120); }
 }
 
 /* Ocultar/revelar pontuação (sempre começa oculto) */
@@ -204,7 +210,9 @@ const main = () => document.getElementById("main");
 
 /* Timers baseados em horário: sobrevivem a recarregar a página e
    sincronizam com a janela do telão. */
-function left(t) { if (!t) return 0; return t.status === "running" ? Math.max(0, (t.endsAt - Date.now()) / 1000) : Math.max(0, t.remaining); }
+// No PC do telão, corrige a diferença de relógio em relação ao PC que registra
+const now = () => Date.now() + (TELAO_WINDOW && NET.on ? NET.offset : 0);
+function left(t) { if (!t) return 0; return t.status === "running" ? Math.max(0, (t.endsAt - now()) / 1000) : Math.max(0, t.remaining); }
 function newTimer(sec) { return { status: "idle", duration: sec, remaining: sec, endsAt: 0 }; }
 function tStart(t) { if (t.status === "running" || t.status === "over") return; t.endsAt = Date.now() + t.remaining * 1000; t.status = "running"; }
 function tPause(t) { if (t.status !== "running") return; t.remaining = left(t); t.status = "paused"; }
@@ -1095,7 +1103,14 @@ function telao() {
     `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
     `<div class="card"><h3>Exibir no telão</h3><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confrontos")}${opt("bracket", "🏅 Chaveamento")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
+    ${netCard()}
     <div class="tv-preview mt"><div class="tv-frame">${telaoScene()}</div></div>`;
+}
+function netCard() {
+  if (NET.on && NET.local) return `<div class="card mt"><h3>🖥️ Telão em outro PC (rede local) ${NET.ok ? `<span class="chip done">🟢 ativo</span>` : `<span class="chip live">🟠 servidor sem resposta</span>`}</h3>
+    <p class="muted small">No PC do telão (mesma rede/Wi-Fi), abra no navegador um destes endereços e dê duplo clique para tela cheia:</p>
+    <div class="net-urls">${NET.urls.length ? NET.urls.map(u => `<code>${esc(u)}</code>`).join("") : `<span class="muted">Nenhum endereço de rede encontrado — confira se este PC está conectado à rede.</span>`}</div></div>`;
+  return `<div class="card mt"><h3>🖥️ Telão em outro PC</h3><p class="muted small">Para usar dois computadores (um registra, outro exibe), abra o sistema pelo <b>iniciar-servidor.bat</b> neste PC. Ele mostra o endereço para abrir no PC do telão. Veja o README.</p></div>`;
 }
 function setDisplay(mode) { state.display.mode = mode; save(); render(); }
 function toggleTvReveal() { state.display.reveal = !state.display.reveal; save(); render(); }
@@ -1116,7 +1131,7 @@ function exitTelao() {
 function renderTelaoWindow() {
   document.body.classList.add("telao-window");
   const box = document.getElementById("tvFull"); box.classList.remove("hidden");
-  box.innerHTML = `<div id="tvScene">${telaoScene()}</div><div class="tv-hint">Duplo clique = tela cheia</div>`;
+  box.innerHTML = `<div id="tvScene">${telaoScene()}</div><div class="tv-hint">Duplo clique = tela cheia</div><div id="netWarn" class="net-warn ${NET.on && !NET.ok ? "" : "hidden"}">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
   updateTimers();
 }
 
@@ -1203,19 +1218,83 @@ setInterval(() => {
   if (changed) { save(); render(); refreshTelaoFull(); } else updateTimers();
 }, 200);
 
-if (TELAO_WINDOW) {
-  window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); render(); } });
-  document.addEventListener("dblclick", () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
-} else {
-  document.querySelectorAll(".nav-btn").forEach(b => b.onclick = () => nav(b.dataset.view));
-  document.getElementById("btnTelao").onclick = () => openTelaoWindow();
-  document.getElementById("btnFullscreen").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); };
-  document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); if (document.body.classList.contains("telao-full")) exitTelao(); } });
-  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("telao-full")) exitTelao(); });
-  // Mantém o telão em tela cheia (na mesma janela) atualizado a cada ação
-  const _render = render;
-  render = function () { _render(); refreshTelaoFull(); };
-  window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); render(); } });
+/* ---------- Rede local ---------- */
+function fetchT(url, ms, opt = {}) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  return fetch(url, { cache: "no-store", ...opt, signal: c.signal }).finally(() => clearTimeout(t));
 }
-render();
+function setNet(ok) {
+  if (ok) NET.lastOk = Date.now();
+  if (NET.ok !== ok) { NET.ok = ok; updateNetPill(); if (!TELAO_WINDOW && state.view === "telao") render(); }
+  const w = document.getElementById("netWarn"); if (w) w.classList.toggle("hidden", ok);
+}
+async function pushState() {
+  if (NET.busy) { NET.again = true; return; }
+  NET.busy = true;
+  try {
+    const r = await fetchT("/api/estado", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: state }) });
+    if (!r.ok) throw new Error(r.status);
+    NET.rev = (await r.json()).rev; setNet(true);
+  } catch (e) { setNet(false); }
+  NET.busy = false;
+  if (NET.again) { NET.again = false; pushState(); }
+}
+async function pollState() {
+  const t0 = Date.now();
+  try {
+    const r = await fetchT(`/api/estado?since=${NET.rev}`, 3000);
+    const j = await r.json(), t1 = Date.now();
+    if (Number.isFinite(j.now)) NET.offset = j.now - (t0 + t1) / 2;
+    if (j.rev !== NET.rev && j.data) { NET.rev = j.rev; state = normalize(j.data); render(); }
+    setNet(true);
+  } catch (e) { if (Date.now() - NET.lastOk > 3000) setNet(false); }
+  setTimeout(pollState, 500);
+}
+// Operador: se o servidor parar, tenta reenviar periodicamente
+setInterval(() => { if (NET.on && NET.local && !TELAO_WINDOW && !NET.ok) pushState(); }, 3000);
+function updateNetPill() {
+  const el = document.getElementById("netPill"); if (!el) return;
+  if (!NET.on || !NET.local || TELAO_WINDOW) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.className = `net-pill ${NET.ok ? "ok" : "bad"}`;
+  el.textContent = NET.ok ? "🟢 Telão em rede" : "🟠 Servidor sem resposta";
+}
+async function detectServer() {
+  if (!/^https?:$/.test(location.protocol) || /github\.io$/.test(location.hostname)) return;
+  try {
+    const r = await fetchT("/api/info", 1500);
+    if (!r.ok) return;
+    const j = await r.json(); if (!j || j.server !== true) return;
+    NET.on = true; NET.local = !!j.local; NET.urls = Array.isArray(j.urls) ? j.urls : [];
+    if (!NET.local) TELAO_WINDOW = true;
+    const e = await (await fetchT("/api/estado", 3000)).json();
+    NET.rev = e.rev || 0; NET.lastOk = Date.now();
+    if (Number.isFinite(e.now)) NET.offset = e.now - Date.now();
+    if (TELAO_WINDOW) { if (e.data) state = normalize(e.data); }
+    else if (e.data) { state = normalize(e.data); state.display.reveal = false; save(); }
+    else save(); // servidor vazio: envia os dados deste PC
+  } catch (err) { NET.on = false; }
+}
+
+function startUI() {
+  if (TELAO_WINDOW) {
+    window.addEventListener("storage", e => { if (e.key === KEY && !NET.on) { state = load(); render(); } });
+    document.addEventListener("dblclick", () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+    if (NET.on) pollState();
+  } else {
+    document.querySelectorAll(".nav-btn").forEach(b => b.onclick = () => nav(b.dataset.view));
+    document.getElementById("btnTelao").onclick = () => openTelaoWindow();
+    document.getElementById("btnFullscreen").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); };
+    document.getElementById("netPill").onclick = () => nav("telao");
+    document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); if (document.body.classList.contains("telao-full")) exitTelao(); } });
+    document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("telao-full")) exitTelao(); });
+    // Mantém o telão em tela cheia (na mesma janela) atualizado a cada ação
+    const _render = render;
+    render = function () { _render(); refreshTelaoFull(); };
+    window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); render(); } });
+  }
+  updateNetPill();
+  render();
+}
+detectServer().finally(startUI);

@@ -310,3 +310,9 @@ body.telao-window #app,body.telao-full #app{display:none}
 .tv-ci.next{border-color:var(--arena);background:var(--arena-l)}
 .tv-ci b{font-size:1.7cqw;flex:1}.tv-ci small{font-size:1.2cqw;color:#7a857f}
 .tv-dot{width:3.4cqw;height:3.4cqw;border-radius:50%;background:var(--c);color:var(--t);display:grid;place-items:center;font-size:1.7cqw;font-weight:950;flex-shrink:0;border:.2cqw solid rgba(0,0,0,.12)}
+
+/* Rede local */
+.net-pill{border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:800;align-self:center}
+.net-pill.ok{border-color:#a7dcb6;color:var(--green-d);background:#f3fbf5}.net-pill.bad{border-color:#f1c27d;color:#8a5a00;background:var(--yellow-l)}
+.net-urls{display:flex;flex-direction:column;gap:6px;margin-top:8px}.net-urls code{font-size:20px;font-weight:800;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 14px;user-select:all}
+.net-warn{position:fixed;top:0;left:0;right:0;background:#fff3cd;color:#7a5a00;text-align:center;font-weight:800;padding:8px;z-index:5}
