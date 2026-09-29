@@ -1180,7 +1180,7 @@ function netCard() {
 // Topo: deixa sempre visível o que o público está vendo no telão
 function updateTvPill() {
   const el = document.getElementById("tvPill"); if (!el) return;
-  const mode = { auto: "ao vivo", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral" }[state.display.mode];
+  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral" }[state.display.mode];
   el.innerHTML = `📺 Telão: ${mode} · ${state.display.reveal ? "<b>pontuação VISÍVEL</b>" : "pontuação oculta"}`;
   el.classList.toggle("on", !!state.display.reveal);
 }
