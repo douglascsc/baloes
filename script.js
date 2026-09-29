@@ -94,6 +94,7 @@ function defaultSettings() {
     cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30,
     winPts: 3, drawPts: 1, lossPts: 0,
     sound: true, soundTv: false, autoBackup: true, cupGames: 2,
+    beepMid: true, beepMidAt: "10, 5", beepEnd: true,
     // Com poucos jogos por equipe, as empatadas raramente se enfrentaram: por isso o saldo vem antes
     // do confronto direto. Com 2 jogos, "Vitórias" não diferencia ninguém (3/1/0).
     tiebreak: [{ key: "saldo", on: true }, { key: "pro", on: true }, { key: "direto", on: true },
@@ -155,6 +156,10 @@ function normalize(raw) {
   st.winPts = clampI(st.winPts, 0, 10, 3); st.drawPts = clampI(st.drawPts, 0, 10, 1); st.lossPts = clampI(st.lossPts, 0, 10, 0);
   st.cupGames = [2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 2;
   st.sound = st.sound !== false; st.soundTv = !!st.soundTv; st.autoBackup = st.autoBackup !== false;
+  st.beepMid = st.beepMid !== false; st.beepEnd = st.beepEnd !== false;
+  // segundos dos bipes intermediários: "10, 5" (de 1 a 600, sem repetir, do maior para o menor)
+  const mids = [...new Set(String(st.beepMidAt ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10);
+  st.beepMidAt = mids.join(", ");
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
@@ -279,7 +284,10 @@ const beeped = new Set();
 function countdownBeep(t) {
   if (!t || t.status !== "running") return;
   const L = left(t);
-  [[10, "warn"], [5, "warn"], [0, "end"]].forEach(([th, kind]) => {
+  const s = cfg(), marks = [];
+  if (s.beepMid) String(s.beepMidAt).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
+  if (s.beepEnd) marks.push([0, "end"]);
+  marks.forEach(([th, kind]) => {
     if (L <= th && L > th - 1.5 && t.duration > th + 1) { const k = `${t.endsAt}:${th}`; if (!beeped.has(k)) { beeped.add(k); beep(kind); } }
   });
 }
@@ -1638,10 +1646,17 @@ function config() {
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
       </div><p class="muted small mt-s">Padrão: 2 jogos por equipe · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
-        <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC (bipe aos 10 s e 5 s, sinal no fim)</label>
-        <label class="check mt-s"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
-        <label class="check mt-s"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label>
-        <div class="actions mt-s"><button class="btn small" onclick="getAudio();beep('warn');setTimeout(()=>beep('end'),400)">🔈 Testar som</button></div></div>
+        <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
+        <label class="check"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
+        <p class="muted small">Bipes (valem para este PC e para o telão):</p>
+        <div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}">
+          <label class="check"><input type="checkbox" ${s.beepMid ? "checked" : ""} onchange="setSetting('beepMid',this.checked)"> Bipe intermediário (curto) quando faltarem</label>
+          <div class="beep-at"><input type="text" inputmode="numeric" value="${esc(s.beepMidAt)}" onchange="setSetting('beepMidAt',this.value)" aria-label="Segundos dos bipes intermediários" ${s.beepMid ? "" : "disabled"}><span class="muted small">segundos (ex.: 30, 10, 5)</span></div>
+          <label class="check"><input type="checkbox" ${s.beepEnd ? "checked" : ""} onchange="setSetting('beepEnd',this.checked)"> Bipe final (longo) quando o tempo acabar</label>
+        </div>
+        <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
+        <hr class="sep">
+        <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label></div>
       <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
       <details class="card fold"><summary><b>📜 Histórico de alterações</b> <span class="muted small">(${state.log.length})</span></summary>
         <div class="log mt-s">${state.log.slice(-300).reverse().map(x => `<div class="log-item"><span><b>${esc(fmtDate(x.at))}</b> · ${esc(x.msg)}</span></div>`).join("") || `<div class="muted small">Nenhum registro ainda.</div>`}</div>
