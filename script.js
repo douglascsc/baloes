@@ -94,7 +94,9 @@ function defaultSettings() {
     cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30,
     winPts: 3, drawPts: 1, lossPts: 0,
     sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
-    beepMid: true, beepMidAt: "10, 5", beepEnd: true,
+    // bipes separados por prova; no Confronto Direto o intervalo não bipa (padrão)
+    freeBeepMid: true, freeBeepMidAt: "10, 5", freeBeepEnd: true,
+    cupBeepMid: true, cupBeepMidAt: "10, 5", cupBeepEnd: true, cupBeepBreak: false,
     // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
     tiebreak: [{ key: "saldo", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
       { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 4
@@ -157,10 +159,14 @@ function normalize(raw) {
   // Padrão passou a ser "todos contra todos": quem estava no padrão antigo (2) migra uma vez
   if (!(s.settings && s.settings.cupV === 2)) { if (Number(s.settings?.cupGames ?? 2) === 2) st.cupGames = 0; st.cupV = 2; }
   st.sound = st.sound !== false; st.soundTv = !!st.soundTv; st.autoBackup = st.autoBackup !== false;
-  st.beepMid = st.beepMid !== false; st.beepEnd = st.beepEnd !== false;
+  // Versão anterior tinha uma configuração única de bipes: vale para as duas provas
+  const rawSt = s.settings || {};
+  if (rawSt.beepMid !== undefined && rawSt.freeBeepMid === undefined) { ["Mid", "MidAt", "End"].forEach(k => { st["freeBeep" + k] = rawSt["beep" + k]; st["cupBeep" + k] = rawSt["beep" + k]; }); }
+  delete st.beepMid; delete st.beepMidAt; delete st.beepEnd;
   // segundos dos bipes intermediários: "10, 5" (de 1 a 600, sem repetir, do maior para o menor)
-  const mids = [...new Set(String(st.beepMidAt ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10);
-  st.beepMidAt = mids.join(", ");
+  const secs = v => [...new Set(String(v ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10).join(", ");
+  ["free", "cup"].forEach(p => { st[p + "BeepMid"] = st[p + "BeepMid"] !== false; st[p + "BeepEnd"] = st[p + "BeepEnd"] !== false; st[p + "BeepMidAt"] = secs(st[p + "BeepMidAt"]); });
+  st.cupBeepBreak = !!st.cupBeepBreak;
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
@@ -292,12 +298,14 @@ function beep(kind = "end") {
   if (kind === "warn") tone(660, 0.14); else { tone(880, 0.9); }
 }
 const beeped = new Set();
-function countdownBeep(t) {
+// kind: "free" (Arena Livre) ou "cup" (Confronto Direto); phase: fase do confronto
+function countdownBeep(t, kind = "free", phase = "") {
   if (!t || t.status !== "running") return;
-  const L = left(t);
   const s = cfg(), marks = [];
-  if (s.beepMid) String(s.beepMidAt).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
-  if (s.beepEnd) marks.push([0, "end"]);
+  if (kind === "cup" && phase === "break" && !s.cupBeepBreak) return;
+  const L = left(t);
+  if (s[kind + "BeepMid"]) String(s[kind + "BeepMidAt"]).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
+  if (s[kind + "BeepEnd"]) marks.push([0, "end"]);
   marks.forEach(([th, kind]) => {
     if (L <= th && L > th - 1.5 && t.duration > th + 1) { const k = `${t.endsAt}:${th}`; if (!beeped.has(k)) { beeped.add(k); beep(kind); } }
   });
@@ -1664,11 +1672,13 @@ function config() {
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
         <label class="check"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
         <p class="muted small">Bipes (valem para este PC e para o telão):</p>
-        <div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}">
-          <label class="check"><input type="checkbox" ${s.beepMid ? "checked" : ""} onchange="setSetting('beepMid',this.checked)"> Bipe intermediário (curto) quando faltarem</label>
-          <div class="beep-at"><input type="text" inputmode="numeric" value="${esc(s.beepMidAt)}" onchange="setSetting('beepMidAt',this.value)" aria-label="Segundos dos bipes intermediários" ${s.beepMid ? "" : "disabled"}><span class="muted small">segundos (ex.: 30, 10, 5)</span></div>
-          <label class="check"><input type="checkbox" ${s.beepEnd ? "checked" : ""} onchange="setSetting('beepEnd',this.checked)"> Bipe final (longo) quando o tempo acabar</label>
-        </div>
+        ${[["free", "🎈 Arena Livre"], ["cup", "⚔️ Confronto Direto (Round 1 e Round 2)"]].map(([k, title]) => `<div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}">
+          <b class="beep-title">${title}</b>
+          <label class="check"><input type="checkbox" ${s[k + "BeepMid"] ? "checked" : ""} onchange="setSetting('${k}BeepMid',this.checked)"> Bipe intermediário (curto) quando faltarem</label>
+          <div class="beep-at"><input type="text" inputmode="numeric" value="${esc(s[k + "BeepMidAt"])}" onchange="setSetting('${k}BeepMidAt',this.value)" aria-label="Segundos dos bipes intermediários — ${title}" ${s[k + "BeepMid"] ? "" : "disabled"}><span class="muted small">segundos (ex.: 30, 10, 5)</span></div>
+          <label class="check"><input type="checkbox" ${s[k + "BeepEnd"] ? "checked" : ""} onchange="setSetting('${k}BeepEnd',this.checked)"> Bipe final (longo) quando o tempo acabar</label>
+          ${k === "cup" ? `<label class="check"><input type="checkbox" ${s.cupBeepBreak ? "checked" : ""} onchange="setSetting('cupBeepBreak',this.checked)"> Bipar também no intervalo entre os rounds</label>` : ""}
+        </div>`).join("")}
         <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
         <hr class="sep">
         <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label></div>
@@ -1759,7 +1769,7 @@ function updateTimers() {
 function refreshTelaoFull() { const s = document.getElementById("tvScene"); if (s && document.body.classList.contains("telao-full")) { s.innerHTML = telaoScene(); tvPops(); updateTimers(); } }
 
 setInterval(() => {
-  countdownBeep(state.free.current?.timer); countdownBeep(liveMatch()?.timer);
+  countdownBeep(state.free.current?.timer, "free"); countdownBeep(liveMatch()?.timer, "cup", liveMatch()?.phase);
   if (TELAO_WINDOW) { updateTimers(); return; }
   let changed = false;
   const cur = state.free.current;

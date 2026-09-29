@@ -95,7 +95,7 @@ Cada marcação guarda os pontos do momento: mudar a regra não altera o que já
 
 ## Durante a competição
 - **Ajuste do cronômetro:** botões **−5 s / +5 s** abaixo do cronômetro (ex.: o juiz iniciou atrasado). Nunca passa do tempo máximo.
-- **Sons:** bipe intermediário curto (padrão aos 10 s e aos 5 s; os segundos são configuráveis) e bipe final longo. Os dois podem ser ligados ou desligados em Config. → Sons e backup. Pode tocar também no telão, se ativado em Configurações; é preciso clicar uma vez na tela do telão para liberar o som.
+- **Sons:** bipes separados para a Arena Livre e para o Confronto Direto: intermediário curto (padrão aos 10 s e aos 5 s; os segundos são configuráveis) e final longo, cada um podendo ser ligado ou desligado. No Confronto, o intervalo entre os rounds não bipa (opcional). Configure em Config. → Sons e backup.
 - **Destaque no telão:** cada marcação aparece grande ("+50", "+100") por um instante.
 - **Falha técnica no Confronto:** **🔁 Repetir Round** zera o round atual (marcações e cronômetro), registrando o motivo.
 - **Backup automático:** ao fim da Arena Livre, da fase preliminar e da final, o sistema baixa sozinho a planilha e o JSON na pasta Downloads (pode ser desligado).
