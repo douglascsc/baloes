@@ -16,17 +16,31 @@ let TELAO_WINDOW = location.hash === "#telao";
 const NET = { on: false, local: false, urls: [], rev: 0, offset: 0, ok: true, lastOk: 0, timer: null, busy: false, again: false };
 
 /* ---------- Regras (Regulamento RoboSapiens 2026, seção 5) ---------- */
-const FREE_EVENTS = [
-  { pts: 50, label: "Balão de outra cor", short: "+50", icon: "🎈", cls: "good" },
-  { pts: -50, label: "Balão da própria cor", short: "−50", icon: "💥", cls: "bad" },
-  { pts: -30, label: "Saiu da arena", short: "−30", icon: "↗", cls: "bad" }
-];
-const MATCH_EVENTS = [
-  { pts: 100, label: "Estourou balão adversário", short: "+100", icon: "🎈" },
-  { pts: 30, label: "Adversário saiu da arena", short: "+30", icon: "↗" }
-];
+// Valores padrão do regulamento; podem ser ajustados em Configurações.
+// Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
 const ROUND1_SECONDS = 120, BREAK_SECONDS = 120, ROUND2_SECONDS = 60;
-const WIN_PTS = 3, DRAW_PTS = 1, LOSS_PTS = 0;
+const cfg = () => state.settings;
+function freeEvents() {
+  const s = cfg();
+  return [
+    { pts: s.freeOther, label: "Balão de outra cor", short: signed(s.freeOther), icon: "🎈", cls: "good" },
+    { pts: -s.freeOwn, label: "Balão da própria cor", short: signed(-s.freeOwn), icon: "💥", cls: "bad" },
+    { pts: -s.freeExit, label: "Saiu da arena", short: signed(-s.freeExit), icon: "↗", cls: "bad" }
+  ];
+}
+function matchEvents() {
+  const s = cfg();
+  return [
+    { pts: s.cupBalloon, label: "Estourou balão adversário", short: signed(s.cupBalloon), icon: "🎈" },
+    { pts: s.cupExit, label: "Adversário saiu da arena", short: signed(s.cupExit), icon: "↗" }
+  ];
+}
+const WIN_PTS_ = () => cfg().winPts, DRAW_PTS_ = () => cfg().drawPts, LOSS_PTS_ = () => cfg().lossPts;
+// "2 min", "90 s", "1 min 30 s"
+function rulesFree() { const s = cfg(); return `+${s.freeOther} balão de outra cor · −${s.freeOwn} balão da própria cor · −${s.freeExit} saída da arena`; }
+function rulesCup() { const s = cfg(); return `+${s.cupBalloon} por balão adversário estourado · +${s.cupExit} quando o adversário sai da arena`; }
+function rulesCupTime() { const s = cfg(); return `Round 1 até ${durTxt(s.cupR1)} · intervalo até ${durTxt(s.cupBreak)} · Round 2 até ${durTxt(s.cupR2)}`; }
+function durTxt(sec) { sec = Math.round(num(sec)); const m = Math.floor(sec / 60), r = sec % 60; return m && r ? `${m} min ${r} s` : m ? `${m} min` : `${r} s`; }
 
 const TIEBREAKS = {
   direto: { label: "Confronto direto", desc: "Pontos nos jogos entre as equipes empatadas" },
@@ -61,8 +75,12 @@ function defaultColors() { return DEFAULT_COLORS.map(([name, hex], i) => ({ id: 
 function defaultSettings() {
   return {
     freeRounds: 4, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
-    // Com 2 jogos por equipe, as empatadas quase nunca se enfrentaram: por isso o saldo vem antes
-    // do confronto direto. "Vitórias" não diferencia ninguém com 2 jogos (3/1/0).
+    freeOther: 50, freeOwn: 50, freeExit: 30,
+    cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30,
+    winPts: 3, drawPts: 1, lossPts: 0,
+    sound: true, soundTv: false, autoBackup: true, cupGames: 2,
+    // Com poucos jogos por equipe, as empatadas raramente se enfrentaram: por isso o saldo vem antes
+    // do confronto direto. Com 2 jogos, "Vitórias" não diferencia ninguém (3/1/0).
     tiebreak: [{ key: "saldo", on: true }, { key: "pro", on: true }, { key: "direto", on: true },
       { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 2
   };
@@ -110,11 +128,18 @@ function normalize(raw) {
     .filter(c => c && typeof c === "object")
     .map((c, i) => ({ id: str(c.id) || uid(), number: Math.max(1, Math.round(num(c.number, i + 1))), name: str(c.name) || `Cor ${i + 1}`, hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" }));
   const st = { ...defaultSettings(), ...(s.settings || {}) };
-  st.freeRounds = Math.min(4, Math.max(1, Math.round(num(st.freeRounds, 4))));
+  st.freeRounds = Math.min(5, Math.max(1, Math.round(num(st.freeRounds, 4))));
   st.freeSeconds = Math.min(600, Math.max(5, Math.round(num(st.freeSeconds, 30))));
   st.freeRankMode = st.freeRankMode === "melhor" ? "melhor" : "soma";
   st.freeMinZero = !!st.freeMinZero;
   st.geralCup = st.geralCup === "prelim" ? "prelim" : "todas";
+  const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
+  st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
+  st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
+  st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30);
+  st.winPts = clampI(st.winPts, 0, 10, 3); st.drawPts = clampI(st.drawPts, 0, 10, 1); st.lossPts = clampI(st.lossPts, 0, 10, 0);
+  st.cupGames = Number(st.cupGames) === 4 ? 4 : 2;
+  st.sound = st.sound !== false; st.soundTv = !!st.soundTv; st.autoBackup = st.autoBackup !== false;
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
@@ -127,7 +152,7 @@ function normalize(raw) {
   s.free = {
     attempts: (Array.isArray(f.attempts) ? f.attempts : []).filter(a => a && ids.has(a.teamId)).map(a => ({
       id: str(a.id) || uid(), teamId: a.teamId, round: Math.max(1, Math.round(num(a.round, 1))),
-      color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at)
+      color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at), repeats: normRepeats(a.repeats)
     })),
     current: null, draws: {}
   };
@@ -135,7 +160,7 @@ function normalize(raw) {
     const cs = normColorSnap(c); if (ids.has(tid) && cs) s.free.draws[tid] = cs;
   });
   if (f.current && ids.has(f.current.teamId)) {
-    s.free.current = { id: str(f.current.id) || uid(), teamId: f.current.teamId, round: Math.max(1, Math.round(num(f.current.round, 1))), color: normColorSnap(f.current.color), events: normEvents(f.current.events), timer: normTimer(f.current.timer, st.freeSeconds) };
+    s.free.current = { id: str(f.current.id) || uid(), teamId: f.current.teamId, round: Math.max(1, Math.round(num(f.current.round, 1))), color: normColorSnap(f.current.color), events: normEvents(f.current.events), repeats: normRepeats(f.current.repeats), timer: normTimer(f.current.timer, st.freeSeconds) };
   }
   const c = s.cup && typeof s.cup === "object" ? s.cup : {};
   s.cup = {
@@ -148,7 +173,7 @@ function normalize(raw) {
       rounds: { 1: { events: normEvents(m.rounds?.[1]?.events) }, 2: { events: normEvents(m.rounds?.[2]?.events) } },
       winner: m.winner === "draw" || ids.has(m.winner) ? m.winner : null,
       pick: ids.has(m.pick) ? m.pick : null, byDecision: !!m.byDecision,
-      _backup: typeof m._backup === "string" ? m._backup : undefined
+      _backup: typeof m._backup === "string" ? m._backup : undefined, repeats: normRepeats(m.repeats)
     })).filter(m => m.a && m.b),
     liveId: str(c.liveId) || null,
     manualOrder: (Array.isArray(c.manualOrder) ? c.manualOrder : []).filter(id => ids.has(id))
@@ -157,10 +182,12 @@ function normalize(raw) {
     s.cup.liveId = null;
     s.cup.matches.forEach(m => { if (m.status === "live") m.status = "pending"; });
   }
+  s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
   s.display = { mode: ["auto", "arena", "cup", "bracket", "geral"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
   s.view = ["inicio", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
   return s;
 }
+function normRepeats(list) { return (Array.isArray(list) ? list : []).filter(x => x && typeof x === "object").map(x => ({ at: str(x.at), reason: str(x.reason) || "não informado", round: Math.round(num(x.round, 0)) || undefined })); }
 function normColorSnap(c) {
   if (!c || typeof c !== "object") return null;
   return { id: str(c.id), number: Math.round(num(c.number, 0)), name: str(c.name) || "Cor", hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" };
@@ -204,13 +231,38 @@ function toast(msg, type = "ok") {
 }
 // Aviso (ação recusada/atenção): fica mais tempo e com cor de alerta
 const warn = msg => toast(msg, "warn");
-function beep() {
+// Histórico de alterações (vai também para a planilha Excel)
+function logEv(msg) {
   if (TELAO_WINDOW) return;
+  state.log.push({ at: new Date().toISOString(), msg });
+  if (state.log.length > 3000) state.log.splice(0, state.log.length - 3000);
+}
+/* Sons: bipe curto aos 10 s e aos 5 s, sinal longo no fim. O navegador só libera
+   o áudio depois de um clique na página. */
+let audioCtx = null;
+function getAudio() {
   try {
-    const C = window.AudioContext || window.webkitAudioContext; const c = new C();
-    const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = 880;
-    o.connect(g); g.connect(c.destination); g.gain.value = 0.08; o.start(); o.stop(c.currentTime + 0.7);
-  } catch (e) { /* sem áudio */ }
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  } catch (e) { return null; }
+}
+function tone(freq, dur, vol = 0.09) {
+  const c = getAudio(); if (!c || c.state !== "running") return;
+  const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = freq;
+  o.connect(g); g.connect(c.destination); g.gain.value = vol; o.start(); o.stop(c.currentTime + dur);
+}
+function beep(kind = "end") {
+  if (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound) return;
+  if (kind === "warn") tone(660, 0.14); else { tone(880, 0.9); }
+}
+const beeped = new Set();
+function countdownBeep(t) {
+  if (!t || t.status !== "running") return;
+  const L = left(t);
+  [[10, "warn"], [5, "warn"], [0, "end"]].forEach(([th, kind]) => {
+    if (L <= th && L > th - 1.5 && t.duration > th + 1) { const k = `${t.endsAt}:${th}`; if (!beeped.has(k)) { beeped.add(k); beep(kind); } }
+  });
 }
 function textOn(hex) {
   const h = str(hex).replace("#", ""); if (h.length !== 6) return "#111";
@@ -230,6 +282,23 @@ function newTimer(sec) { return { status: "idle", duration: sec, remaining: sec,
 function tStart(t) { if (t.status === "running" || t.status === "over") return; t.endsAt = Date.now() + t.remaining * 1000; t.status = "running"; }
 function tPause(t) { if (t.status !== "running") return; t.remaining = left(t); t.status = "paused"; }
 function elapsed(t) { return fmt(t.duration - left(t)); }
+// Ajuste manual do cronômetro (ex.: o juiz iniciou atrasado). Nunca passa do tempo máximo.
+function adjTimer(kind, d) {
+  const m = kind === "match" ? liveMatch() : null;
+  const t = kind === "free" ? state.free.current?.timer : m?.timer;
+  if (!t || (m && m.phase === "review")) return;
+  const nl = Math.max(0, Math.min(t.duration, left(t) + d));
+  if (Math.abs(nl - left(t)) < 0.5) return warn(d > 0 ? "O cronômetro já está no tempo máximo." : "O cronômetro já está zerado.");
+  if (t.status === "running") t.endsAt = Date.now() + nl * 1000;
+  else { t.remaining = nl; if (t.status === "over" && nl > 0) t.status = "paused"; }
+  const ctx = kind === "free" ? `Arena Livre — ${teamName(state.free.current.teamId)}, Rodada ${state.free.current.round}` : `${matchLabel(m)} — ${{ r1: "Round 1", break: "Intervalo", r2: "Round 2" }[m.phase]}`;
+  logEv(`Cronômetro ajustado ${d > 0 ? "+" : "−"}${Math.abs(d)} s (${ctx}) → ${fmt(nl)}`);
+  save(); render();
+}
+function adjBtns(kind, t) {
+  if (!t || t.status === "idle") return "";
+  return `<div class="adj"><button class="btn tiny" onclick="adjTimer('${kind}',-5)" aria-label="Tirar 5 segundos">−5 s</button><button class="btn tiny" onclick="adjTimer('${kind}',5)" aria-label="Acrescentar 5 segundos">+5 s</button></div>`;
+}
 
 /* ============================ EQUIPES / CORES ============================ */
 const teams = () => state.teams;
@@ -307,8 +376,8 @@ function inicio() {
     </div>
     <div class="card mt"><h2>Regras essenciais</h2>
       <div class="grid g2">
-        <div class="notice"><b>🎈 Arena Livre</b> — 2,70 × 2,70 m · uma equipe por vez · ${state.settings.freeSeconds} s por tentativa · +50 balão de outra cor · −50 balão da própria cor · −30 saída da arena</div>
-        <div class="notice cup"><b>⚔️ Confronto Direto</b> — 1,20 × 1,20 m · Round 1 até 2 min · intervalo até 2 min · Round 2 até 1 min · +100 por balão adversário · +30 quando o adversário sai</div>
+        <div class="notice"><b>🎈 Arena Livre</b> — 2,70 × 2,70 m · uma equipe por vez · ${state.settings.freeSeconds} s por tentativa · ${rulesFree()}</div>
+        <div class="notice cup"><b>⚔️ Confronto Direto</b> — 1,20 × 1,20 m · ${rulesCupTime()} · ${rulesCup()}</div>
       </div>
       <p class="muted small mt-s">A Arena Livre e o Confronto Direto têm classificações separadas.</p>
     </div>`;
@@ -352,6 +421,7 @@ function teamForm(id) {
     if (!data.school) return fieldErr(F, "school", "Informe o nome da escola.");
     if (teams().some(x => x !== t && x.name.toLowerCase() === data.name.toLowerCase())) return fieldErr(F, "name", "Já existe uma equipe com esse nome.");
     if (data.number && teams().some(x => x !== t && x.number === data.number)) return fieldErr(F, "number", `A numeração ${pad2(data.number)} já está em uso por ${teams().find(x => x !== t && x.number === data.number).name}.`);
+    logEv(t ? `Equipe editada: ${t.name}${t.name !== data.name ? ` → ${data.name}` : ""}` : `Equipe incluída: ${data.name} (${data.school})`);
     if (t) Object.assign(t, data); else state.teams.push({ id: uid(), ...data });
     save(); closeModal(); toast(t ? "Equipe atualizada" : "Equipe adicionada"); render();
   };
@@ -360,7 +430,7 @@ const editTeam = id => teamForm(id);
 function clearNumbers() {
   if (!teams().some(t => t.number)) return warn("As equipes já estão sem numeração.");
   if (!confirm("Remover a numeração de todas as equipes? Elas voltam a aparecer como “Equipe XX” até um novo sorteio.")) return;
-  teams().forEach(t => { t.number = null; }); save(); toast("Numeração removida"); render();
+  teams().forEach(t => { t.number = null; }); logEv("Numeração das equipes removida"); save(); toast("Numeração removida"); render();
 }
 function deleteTeam(id) {
   const t = findTeam(id); if (!t) return;
@@ -368,6 +438,7 @@ function deleteTeam(id) {
   if (state.cup.matches.some(m => m.a === id || m.b === id)) return warn("A equipe está nos confrontos. Reinicie os confrontos em Configurações para excluí-la.");
   const n = state.free.attempts.filter(a => a.teamId === id).length;
   if (!confirm(`Excluir a equipe "${t.name}"?${n ? `\n\nAs ${n} tentativa(s) dela na Arena Livre também serão apagadas.` : ""}`)) return;
+  logEv(`Equipe excluída: ${t.name}`);
   state.teams = state.teams.filter(x => x.id !== id);
   state.free.attempts = state.free.attempts.filter(a => a.teamId !== id);
   state.cup.manualOrder = state.cup.manualOrder.filter(x => x !== id);
@@ -379,6 +450,7 @@ function drawNumbers() {
   if (!confirm("Sortear a numeração de todas as equipes?" + warn)) return;
   const nums = shuffle(teams().map((_, i) => i + 1));
   teams().forEach((t, i) => { t.number = nums[i]; });
+  logEv(`Numeração sorteada: ${sortedTeams().map(t => `${pad2(t.number)} ${t.name}`).join(", ")}`);
   save(); toast("Numeração sorteada"); render();
 }
 function shuffle(a) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -463,6 +535,7 @@ function drawColors() {
   while (pool.length < teams().length) pool = pool.concat(shuffle(state.colors));
   state.free.draws = {};
   sortedTeams().forEach((t, i) => { state.free.draws[t.id] = snap(pool[i]); });
+  logEv(`Cores sorteadas: ${sortedTeams().map(t => `${t.name} = ${state.free.draws[t.id].number} ${state.free.draws[t.id].name}`).join(", ")}`);
   save(); toast(teams().length > state.colors.length ? `Cores sorteadas (${state.colors.length} cores para ${teams().length} equipes: algumas se repetem)` : "Cores sorteadas — valem para todas as rodadas"); render();
 }
 function drawMissing() {
@@ -475,7 +548,7 @@ function setDrawColor(teamId, colorId) {
   const c = state.colors.find(x => x.id === colorId); if (!c) return;
   const other = teams().find(t => t.id !== teamId && drawOf(t.id)?.id === c.id);
   if (other && !confirm(`A cor ${c.number} (${c.name}) já é de ${other.name}. Usar mesmo assim?`)) return render();
-  state.free.draws[teamId] = snap(c); save(); toast("Cor alterada"); render();
+  state.free.draws[teamId] = snap(c); logEv(`Cor de ${teamName(teamId)} alterada para ${c.number} ${c.name}`); save(); toast("Cor alterada"); render();
 }
 function teamColorsCard(inArena = false) {
   const has = teams().some(t => drawOf(t.id)), missing = has && !allDrawn();
@@ -497,7 +570,8 @@ function callTeam(teamId, round) {
   if (!color) return warn("Sorteie as cores das equipes antes de chamar para a arena.");
   const cr = currentFreeRound();
   if (round > cr && !confirm(`A Rodada ${cr} ainda não terminou.\nChamar ${teamName(teamId)} para a Rodada ${round} mesmo assim?`)) return;
-  state.free.current = { id: uid(), teamId, round, color, events: [], timer: newTimer(state.settings.freeSeconds) };
+  state.free.current = { id: uid(), teamId, round, color, events: [], repeats: [], timer: newTimer(state.settings.freeSeconds) };
+  logEv(`Arena Livre: ${teamName(teamId)} chamada para a Rodada ${round} (cor ${color.number} · ${color.name})`);
   save(); render();
 }
 function callNext() { const n = nextFree(); if (!n) return warn("Todas as tentativas já foram realizadas."); callTeam(n.teamId, n.round); }
@@ -507,7 +581,7 @@ function freeToggle() {
   save(); render();
 }
 function freeEvent(i) {
-  const cur = state.free.current, ev = FREE_EVENTS[i]; if (!cur || !ev) return;
+  const cur = state.free.current, ev = freeEvents()[i]; if (!cur || !ev) return;
   if (cur.timer.status === "idle") return warn("Inicie o cronômetro antes de marcar pontos.");
   cur.events.push({ id: uid(), pts: ev.pts, label: ev.label, t: elapsed(cur.timer), seq: Date.now() });
   save(); render();
@@ -525,18 +599,55 @@ function freeFinish() {
   if (cur.timer.status === "idle") return warn("A tentativa ainda não começou.");
   const total = attemptTotal(cur);
   if (!confirm(`Registrar o resultado de ${teamName(cur.teamId)} na Rodada ${cur.round}?\n\nPontuação: ${signed(total)}`)) return;
-  state.free.attempts.push({ id: cur.id, teamId: cur.teamId, round: cur.round, color: cur.color, events: cur.events, at: new Date().toISOString() });
+  state.free.attempts.push({ id: cur.id, teamId: cur.teamId, round: cur.round, color: cur.color, events: cur.events, repeats: cur.repeats || [], at: new Date().toISOString() });
+  const c = l => cur.events.filter(e => e.label === l).length;
+  logEv(`Arena Livre: ${teamName(cur.teamId)} — Rodada ${cur.round} registrada: ${signed(total)} (${c("Balão de outra cor")} de outra cor, ${c("Balão da própria cor")} da própria cor, ${c("Saiu da arena")} saída(s))`);
   state.free.current = null; save(); toast("Resultado registrado"); render();
+  const fs = freeSummary();
+  if (fs.total && fs.done >= fs.total) autoBackup("apos-arena-livre", "Arena Livre concluída");
 }
 function freeCancel() {
   const cur = state.free.current; if (!cur) return;
   if ((cur.events.length || cur.timer.status !== "idle") && !confirm("Cancelar esta tentativa? As marcações dela serão descartadas e a equipe volta para a fila.")) return;
+  logEv(`Arena Livre: tentativa de ${teamName(cur.teamId)} (Rodada ${cur.round}) cancelada — equipe voltou para a fila`);
   state.free.current = null; save(); render();
+}
+// Falha técnica: zera as marcações e o cronômetro da tentativa atual, registrando o motivo
+function freeRepeat() {
+  const cur = state.free.current; if (!cur) return;
+  const reason = prompt(`Repetir a tentativa de ${teamName(cur.teamId)} (Rodada ${cur.round}) por falha técnica.\nAs marcações e o cronômetro serão zerados.\n\nMotivo:`, "");
+  if (reason === null) return;
+  const why = str(reason) || "não informado";
+  cur.repeats = [...(cur.repeats || []), { at: new Date().toISOString(), reason: why }];
+  logEv(`Arena Livre: tentativa de ${teamName(cur.teamId)} (Rodada ${cur.round}) repetida por falha técnica — marcações descartadas: ${signed(attemptTotal(cur))}. Motivo: ${why}`);
+  cur.events = []; cur.timer = newTimer(state.settings.freeSeconds);
+  save(); toast("Tentativa zerada para repetição"); render();
 }
 function freeVoid(id) {
   const a = state.free.attempts.find(x => x.id === id); if (!a) return;
-  if (!confirm(`Anular a tentativa de ${teamName(a.teamId)} na Rodada ${a.round}?\nA equipe volta para a fila dessa rodada.`)) return;
+  const reason = prompt(`Anular a tentativa de ${teamName(a.teamId)} na Rodada ${a.round} (${signed(attemptTotal(a))})?\nA equipe volta para a fila dessa rodada.\n\nMotivo (ex.: falha técnica):`, "");
+  if (reason === null) return;
+  logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}, ${signed(attemptTotal(a))}) anulada. Motivo: ${str(reason) || "não informado"}`);
   state.free.attempts = state.free.attempts.filter(x => x.id !== id); save(); toast("Tentativa anulada"); render();
+}
+function roundComplete(r) { return teams().length > 0 && teams().every(t => attemptOf(t.id, r)); }
+function lastCompleteRound() { let r = 0; while (r < 5 && roundComplete(r + 1)) r++; return r; }
+function closeArena() {
+  const r = lastCompleteRound();
+  if (!r) return warn("Nenhuma rodada foi concluída ainda.");
+  if (state.free.current) return warn("Há uma equipe na arena. Registre ou cancele a tentativa antes.");
+  const extra = state.free.attempts.filter(a => a.round > r).length;
+  if (!confirm(`Encerrar a Arena Livre com ${r} rodada${r > 1 ? "s" : ""}?${extra ? `\n\n${extra} tentativa(s) da Rodada ${r + 1} ficarão fora da classificação (não são apagadas).` : ""}\n\nDá para reabrir depois, se necessário.`)) return;
+  state.settings.freeRounds = r;
+  logEv(`Arena Livre encerrada com ${r} rodada(s)`);
+  save(); render();
+  autoBackup("apos-arena-livre", "Arena Livre concluída");
+}
+function reopenArena() {
+  const n = Math.min(5, state.settings.freeRounds + 1);
+  if (n === state.settings.freeRounds) return;
+  if (!confirm(`Reabrir a Arena Livre para a Rodada ${n}?`)) return;
+  state.settings.freeRounds = n; logEv(`Arena Livre reaberta: agora com ${n} rodada(s)`); save(); render();
 }
 function freeRanking() {
   const R = state.settings.freeRounds;
@@ -563,7 +674,13 @@ function freeIdle() {
   const n = nextFree(), fs = freeSummary();
   if (!teams().length) return `<div class="card stage"><div class="empty">Cadastre as equipes para começar.</div></div>`;
   if (!state.colors.length) return `<div class="card stage"><div class="notice warn">Nenhuma cor cadastrada. <button class="btn small" onclick="nav('cores')">Cadastrar cores</button></div></div>`;
-  if (!n) return `<div class="card stage center"><div class="big-check">✓</div><h2>Arena Livre concluída</h2><p class="muted">${fs.done} tentativas registradas. Veja a classificação abaixo.</p></div>`;
+  if (!n) return `<div class="card stage center"><div class="big-check">✓</div><h2>Arena Livre concluída</h2><p class="muted">${state.settings.freeRounds} rodada${state.settings.freeRounds > 1 ? "s" : ""} · ${fs.done} tentativas registradas. Veja a classificação abaixo.</p>
+    <div class="actions center-actions mt"><button class="btn primary huge" onclick="nav('confrontos')">⚔️ Ir para o Confronto Direto</button></div>
+    ${state.settings.freeRounds < 5 ? `<p class="mt-s"><button class="btn small ghost" onclick="reopenArena()">↺ Reabrir para a Rodada ${state.settings.freeRounds + 1}</button></p>` : ""}</div>`;
+  // Rodada concluída: escolher entre continuar ou encerrar a Arena Livre
+  const prevDone = n.round > 1 && roundComplete(n.round - 1) && !state.free.attempts.some(a => a.round === n.round);
+  const choice = prevDone ? `<div class="card round-done mb"><div><b>✓ Rodada ${n.round - 1} concluída.</b> Continuar para a Rodada ${n.round} ou encerrar a Arena Livre aqui?</div>
+    <div class="actions"><button class="btn primary" onclick="document.getElementById('callBtn')?.focus()">▶ Continuar para a Rodada ${n.round}</button><button class="btn" onclick="closeArena()">🏁 Encerrar a Arena Livre com ${n.round - 1} rodada${n.round - 1 > 1 ? "s" : ""}</button></div></div>` : "";
   const t = findTeam(n.teamId), c = drawOf(n.teamId);
   if (!c) return `<div class="card stage center">
     <div class="eyebrow">PASSO 1 DE 2</div>
@@ -571,12 +688,13 @@ function freeIdle() {
     <p class="muted">Antes de chamar as equipes, sorteie a cor de cada equipe. A cor vale para todas as rodadas.<br>Os balões da cor sorteada são da própria equipe (−50 se estourar).</p>
     ${teams().some(x => drawOf(x.id)) ? `<button class="btn primary huge mt" onclick="drawMissing()">🎲 Sortear cor para quem falta</button>` : `<button class="btn primary huge mt" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
   </div>`;
-  return `<div class="card stage center">
+  return `${choice}<div class="card stage center">
     <div class="eyebrow">PRÓXIMA NA ARENA · RODADA ${n.round} DE ${state.settings.freeRounds} · PASSO 2 DE 2</div>
     <div class="stage-team">${esc(t.name)}</div><div class="stage-school">${esc(schoolText(t))}</div>
     <div class="stage-color center-flex"><span class="muted small">COR SORTEADA DA EQUIPE</span>${colorChip(c, true)}
       </div>
-    <button class="btn primary huge mt" onclick="callNext()">📣 Chamar para a arena</button>
+    <button class="btn primary huge mt" id="callBtn" onclick="callNext()">📣 Chamar para a arena</button>
+    ${!prevDone && lastCompleteRound() >= 1 ? `<p class="mt-s"><button class="btn small ghost" onclick="closeArena()">🏁 Encerrar a Arena Livre com ${lastCompleteRound()} rodada${lastCompleteRound() > 1 ? "s" : ""}</button></p>` : ""}
   </div>`;
 }
 function freeStage(cur) {
@@ -588,10 +706,10 @@ function freeStage(cur) {
     <div class="stage-team">${esc(t.name)}</div><div class="stage-school">${esc(schoolText(t))}</div>
     <div class="stage-color"><span class="muted small">COR DA EQUIPE (própria)</span>${colorChip(cur.color, true)}</div>
     <div class="stage-mid">
-      <div><div class="timer" data-timer="free">${fmt(left(tm))}</div><div class="status-txt s-${tm.status}">${tm.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</div></div>
+      <div><div class="timer" data-timer="free">${fmt(left(tm))}</div>${adjBtns("free", tm)}<div class="status-txt s-${tm.status}">${tm.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</div></div>
       <div class="stage-score"><span>PONTOS</span><b class="${total < 0 ? "minus" : ""}">${signed(total)}</b></div>
     </div>
-    <div class="score-btns">${FREE_EVENTS.map((e, i) => `<button class="btn score ${e.cls}" onclick="freeEvent(${i})" ${tm.status === "idle" ? "disabled" : ""}><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
+    <div class="score-btns">${freeEvents().map((e, i) => `<button class="btn score ${e.cls}" onclick="freeEvent(${i})" ${tm.status === "idle" ? "disabled" : ""}><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
     ${tm.status === "idle" ? `<p class="hint">Inicie o cronômetro para liberar a pontuação. <kbd>Espaço</kbd> inicia/pausa.</p>` : ""}
     <div class="ctrl-row">
       <button class="btn ${tm.status === "running" ? "" : "primary"} big grow" onclick="freeToggle()" ${tm.status === "over" ? "disabled" : ""}>${toggle}</button>
@@ -599,7 +717,7 @@ function freeStage(cur) {
       <button class="btn warning big grow" onclick="freeFinish()" ${tm.status === "idle" ? "disabled" : ""}>✓ Registrar resultado</button>
     </div>
     <div class="log">${cur.events.slice().reverse().map(e => `<div class="log-item"><span>${esc(e.t)} · ${esc(e.label)}</span><b class="${e.pts >= 0 ? "plus" : "minus"}">${signed(e.pts)}</b><button class="x" title="Remover esta marcação" aria-label="Remover esta marcação" onclick="freeRemoveEvent('${esc(e.id)}')">✕</button></div>`).join("") || `<div class="muted small">Nenhuma marcação ainda.</div>`}</div>
-    <div class="right"><button class="btn small ghost" onclick="freeCancel()">✕ Cancelar tentativa</button></div>
+    <div class="right"><button class="btn small ghost" onclick="freeRepeat()">🔁 Repetir tentativa (falha técnica)</button><button class="btn small ghost" onclick="freeCancel()">✕ Cancelar tentativa</button></div>
   </div>`;
 }
 function freeQueueCard() {
@@ -664,17 +782,35 @@ function cupSummary() {
   return { done, total, stageText };
 }
 
-/* Gera a fase preliminar: cada equipe joga exatamente 2 vezes, sem
-   repetir confrontos (ciclo pela numeração do sorteio), ordenado para
-   que nenhuma equipe jogue dois confrontos seguidos. */
-function buildPrelimPairs(ids) {
+/* Gera a fase preliminar: cada equipe joga exatamente k vezes (2 ou 4), sem
+   repetir confrontos (cada equipe enfrenta as vizinhas na numeração do sorteio,
+   a 1 e a 2 posições de distância), ordenado para que nenhuma equipe jogue
+   dois confrontos seguidos e os jogos de cada equipe fiquem espaçados. */
+const gamesPerTeam = n => (cfg().cupGames === 4 && n >= 5) ? 4 : 2;
+function buildPrelimPairs(ids, k = 2) {
   const n = ids.length, edges = [];
-  for (let i = 0; i < n; i++) edges.push([ids[i], ids[(i + 1) % n]]);
+  for (let d = 1; d <= k / 2; d++) for (let i = 0; i < n; i++) edges.push([ids[i], ids[(i + d) % n]]);
   let order = [];
-  for (let s = 0; s < 2; s++) for (let i = s; i < n; i += 2) order.push(edges[i]);
+  if (k === 2) { for (let s = 0; s < 2; s++) for (let i = s; i < n; i += 2) order.push(edges[i]); }
+  else order = greedyOrder(edges);
   if (conflicts(order) === 0) return order;
   const best = searchOrder(edges);
-  return best || order;
+  return best && conflicts(best) < conflicts(order) ? best : order;
+}
+// Escolhe sempre o confronto cujas equipes estão há mais tempo sem jogar
+function greedyOrder(edges) {
+  const rest = new Map(), left = [...edges], out = [];
+  edges.flat().forEach(t => rest.set(t, -99));
+  while (left.length) {
+    const step = out.length, prev = out[step - 1] || [];
+    let bi = 0, bs = Infinity;
+    left.forEach((e, i) => {
+      const sc = (e.some(t => prev.includes(t)) ? 1000 : 0) - Math.min(step - rest.get(e[0]), step - rest.get(e[1])) * 10 - (step - rest.get(e[0]) + step - rest.get(e[1]));
+      if (sc < bs) { bs = sc; bi = i; }
+    });
+    const e = left.splice(bi, 1)[0]; out.push(e); e.forEach(t => rest.set(t, step));
+  }
+  return out;
 }
 function conflicts(list) {
   let c = 0;
@@ -700,15 +836,18 @@ function searchOrder(edges) {
   return dfs() ? path : null;
 }
 function emptyMatch(stage, order, a, b) {
-  return { id: uid(), stage, order, a, b, status: "pending", phase: "r1", timer: newTimer(ROUND1_SECONDS), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false };
+  return { id: uid(), stage, order, a, b, status: "pending", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false };
 }
 function generatePrelim() {
   const list = sortedTeams();
   if (list.length < 4) return warn("São necessárias pelo menos 4 equipes.");
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
-  const pairs = buildPrelimPairs(list.map(t => t.id));
+  const k = gamesPerTeam(list.length);
+  if (cfg().cupGames === 4 && k !== 4) warn("Com menos de 5 equipes não é possível cada uma jogar 4 vezes sem repetir. Gerando com 2 jogos por equipe.");
+  const pairs = buildPrelimPairs(list.map(t => t.id), k);
   state.cup = { matches: pairs.map((p, i) => emptyMatch("prelim", i + 1, p[0], p[1])), liveId: null, manualOrder: [] };
+  logEv(`Fase preliminar gerada: ${pairs.length} confrontos, ${k} por equipe (${pairs.map(p => `${teamName(p[0])} × ${teamName(p[1])}`).join("; ")})`);
   save(); toast(`${pairs.length} confrontos gerados`); render();
 }
 
@@ -720,9 +859,9 @@ function prelimStats() {
   prelims().filter(m => m.status === "done").forEach(m => {
     const sa = sideScore(m, "a"), sb = sideScore(m, "b"), A = map[m.a], B = map[m.b];
     A.J++; B.J++; A.PM += sa; A.PS += sb; B.PM += sb; B.PS += sa;
-    if (sa > sb) { A.V++; B.D++; A.P += WIN_PTS; B.P += LOSS_PTS; }
-    else if (sb > sa) { B.V++; A.D++; B.P += WIN_PTS; A.P += LOSS_PTS; }
-    else { A.E++; B.E++; A.P += DRAW_PTS; B.P += DRAW_PTS; }
+    if (sa > sb) { A.V++; B.D++; A.P += WIN_PTS_(); B.P += LOSS_PTS_(); }
+    else if (sb > sa) { B.V++; A.D++; B.P += WIN_PTS_(); A.P += LOSS_PTS_(); }
+    else { A.E++; B.E++; A.P += DRAW_PTS_(); B.P += DRAW_PTS_(); }
   });
   Object.values(map).forEach(s => { s.SG = s.PM - s.PS; });
   return Object.values(map).filter(s => s.team);
@@ -732,7 +871,7 @@ function critValue(key, s, group) {
     const g = new Set(group.map(x => x.team.id)); let p = 0;
     prelims().filter(m => m.status === "done" && g.has(m.a) && g.has(m.b) && (m.a === s.team.id || m.b === s.team.id)).forEach(m => {
       const mine = m.a === s.team.id ? "a" : "b", other = mine === "a" ? "b" : "a";
-      const x = sideScore(m, mine), y = sideScore(m, other); p += x > y ? WIN_PTS : x === y ? DRAW_PTS : LOSS_PTS;
+      const x = sideScore(m, mine), y = sideScore(m, other); p += x > y ? WIN_PTS_() : x === y ? DRAW_PTS_() : LOSS_PTS_();
     });
     return p;
   }
@@ -779,6 +918,7 @@ function moveInTie(id, dir) {
 }
 function confirmTieOrder(gid) {
   const rows = standings(); state.cup.manualOrder = rows.map(r => r.team.id);
+  logEv(`Desempate definido pela comissão: ${rows.map((r, i) => `${i + 1}º ${r.team.name}`).join(", ")}`);
   save(); toast("Ordem definida pela Comissão Organizadora"); checkProgress(); render();
 }
 function clearManualOrder() {
@@ -797,11 +937,12 @@ function checkProgress() {
     const s = seeds();
     state.cup.matches.push(emptyMatch("semi", 1, s[0], s[3]), emptyMatch("semi", 2, s[1], s[2]));
     toast("Semifinais geradas: 1º × 4º e 2º × 3º");
+    logEv(`Semifinais geradas: ${teamName(s[0])} × ${teamName(s[3])}; ${teamName(s[1])} × ${teamName(s[2])}`);
   }
   const [s1, s2] = semis();
   if (s1 && s2 && winnerOf(s1) && winnerOf(s2) && !finalMatch()) {
     state.cup.matches.push(emptyMatch("final", 1, winnerOf(s1), winnerOf(s2)));
-    toast("Final gerada");
+    toast("Final gerada"); logEv(`Final gerada: ${teamName(winnerOf(s1))} × ${teamName(winnerOf(s2))}`);
   }
   save();
 }
@@ -813,8 +954,8 @@ function startMatch(id) {
   if (liveMatch()) return warn("Já existe um confronto em andamento.");
   if (state.free.current) return warn("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
   if (m.status !== "pending") return;
-  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(ROUND1_SECONDS), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false });
-  state.cup.liveId = m.id; save(); nav("confrontos");
+  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false });
+  state.cup.liveId = m.id; logEv(`${matchLabel(m)} iniciado: ${teamName(m.a)} × ${teamName(m.b)}`); save(); nav("confrontos");
 }
 function matchToggle() {
   const m = liveMatch(); if (!m || m.phase === "review") return;
@@ -827,21 +968,35 @@ function endRound() {
   if (m.phase === "r1") {
     if (m.timer.status === "idle") return warn("O Round 1 ainda não começou.");
     if (!confirm("Encerrar o Round 1 e iniciar o intervalo?")) return;
-    m.phase = "break"; m.timer = newTimer(BREAK_SECONDS); tStart(m.timer);
+    logEv(`${matchLabel(m)} — Round 1 encerrado: ${teamName(m.a)} ${sideScore(m, "a", 1)} × ${sideScore(m, "b", 1)} ${teamName(m.b)}`);
+    m.phase = "break"; m.timer = newTimer(cfg().cupBreak); if (cfg().cupBreak > 0) tStart(m.timer); else m.timer.status = "over";
   } else if (m.phase === "r2") {
     if (m.timer.status === "idle") return warn("O Round 2 ainda não começou.");
     if (!confirm("Encerrar o Round 2?")) return;
+    logEv(`${matchLabel(m)} — Round 2 encerrado: ${teamName(m.a)} ${sideScore(m, "a", 2)} × ${sideScore(m, "b", 2)} ${teamName(m.b)}`);
     m.phase = "review"; m.timer = newTimer(0); m.timer.status = "over"; reviewRound = 2;
   }
   save(); render();
 }
 function startRound2() {
   const m = liveMatch(); if (!m || m.phase !== "break") return;
-  m.phase = "r2"; m.timer = newTimer(ROUND2_SECONDS); save(); render();
+  m.phase = "r2"; m.timer = newTimer(cfg().cupR2); save(); render();
+}
+// Falha técnica: repete o round atual (zera as marcações e o cronômetro dele), registrando o motivo
+function repeatRound() {
+  const m = liveMatch(); if (!m || (m.phase !== "r1" && m.phase !== "r2")) return;
+  const r = m.phase === "r1" ? 1 : 2;
+  const reason = prompt(`Repetir o Round ${r} (${teamName(m.a)} × ${teamName(m.b)}) por falha técnica.\nAs marcações deste round e o cronômetro serão zerados.\n\nMotivo:`, "");
+  if (reason === null) return;
+  const why = str(reason) || "não informado";
+  logEv(`${matchLabel(m)} — Round ${r} repetido por falha técnica (descartado: ${sideScore(m, "a", r)} × ${sideScore(m, "b", r)}). Motivo: ${why}`);
+  m.repeats = [...(m.repeats || []), { at: new Date().toISOString(), round: r, reason: why }];
+  m.rounds[r].events = []; m.timer = newTimer(r === 1 ? cfg().cupR1 : cfg().cupR2);
+  save(); toast(`Round ${r} zerado para repetição`); render();
 }
 function activeRound(m) { return m.phase === "r1" ? 1 : m.phase === "r2" ? 2 : m.phase === "review" ? reviewRound : null; }
 function matchEvent(side, i) {
-  const m = liveMatch(), ev = MATCH_EVENTS[i]; if (!m || !ev) return;
+  const m = liveMatch(), ev = matchEvents()[i]; if (!m || !ev) return;
   const r = activeRound(m);
   if (!r) return warn("Intervalo: registro de pontos fechado. Use ↶ Desfazer para corrigir.");
   if ((m.phase === "r1" || m.phase === "r2") && m.timer.status === "idle") return warn("Inicie o round antes de marcar pontos.");
@@ -891,20 +1046,27 @@ function confirmResult() {
       state.cup.matches = state.cup.matches.filter(x => x.stage !== "final");
     } else if (!confirm(`${sa} × ${sb}\n${txt}\n\nConfirmar resultado?`)) return;
   } else if (!confirm(`${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)}\n${txt}\n\nConfirmar resultado?`)) return;
+  const before = m._backup ? JSON.parse(m._backup) : null;
+  const beforeTxt = before ? (() => { const tmp = { rounds: before.rounds }; const sc = side => [1, 2].reduce((x, r) => x + tmp.rounds[r].events.filter(e => e.side === side).reduce((y, e) => y + e.pts, 0), 0); return ` (correção; antes: ${sc("a")} × ${sc("b")})`; })() : "";
+  logEv(`${matchLabel(m)} — resultado: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`}${beforeTxt}`);
   Object.assign(m, { status: "done", winner, byDecision, phase: "review", timer: newTimer(0) }); delete m._backup;
   state.cup.liveId = null; save();
   checkProgress();
   toast(m.stage === "final" ? `🏆 ${teamName(winner)} é CAMPEÃO!` : "Resultado registrado");
   render();
+  if (m.stage === "prelim" && prelimDone() && !before) autoBackup("apos-fase-preliminar", "fase preliminar concluída");
+  if (m.stage === "final") autoBackup("final", "competição encerrada");
 }
 function cancelMatch() {
   const m = liveMatch(); if (!m) return;
   if (m.winner) { // era uma correção: volta ao resultado anterior
     if (!confirm("Descartar a correção? As alterações feitas agora serão perdidas.")) return;
     Object.assign(m, JSON.parse(m._backup || "{}"), { status: "done" }); delete m._backup;
+    logEv(`${matchLabel(m)} — correção descartada`);
   } else {
     if (!confirm("Cancelar este confronto? As marcações serão descartadas e ele volta para a fila.")) return;
-    Object.assign(m, { status: "pending", phase: "r1", timer: newTimer(ROUND1_SECONDS), rounds: { 1: { events: [] }, 2: { events: [] } }, pick: null });
+    logEv(`${matchLabel(m)} cancelado (${teamName(m.a)} × ${teamName(m.b)}) — voltou para a fila`);
+    Object.assign(m, { status: "pending", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] } }, pick: null });
   }
   state.cup.liveId = null; save(); render();
 }
@@ -915,6 +1077,7 @@ function reopenMatch(id) {
   if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim" && x.status === "done") && !confirm("Já existem jogos eliminatórios disputados. Se a correção mudar a classificação, eles serão apagados. Continuar?")) return;
   m._backup = JSON.stringify({ rounds: m.rounds, winner: m.winner, pick: m.pick, byDecision: m.byDecision, phase: m.phase });
   Object.assign(m, { status: "live", phase: "review", timer: newTimer(0) }); m.timer.status = "over";
+  logEv(`${matchLabel(m)} — correção iniciada`);
   state.cup.liveId = m.id; reviewRound = 2; save(); render();
   document.querySelector(".live-panel")?.scrollIntoView({ behavior: "smooth" });
 }
@@ -922,10 +1085,11 @@ function reopenMatch(id) {
 /* ============================ TELA: CONFRONTOS ============================ */
 function confrontos() {
   const live = liveMatch(), champ = champion(), n = prelims().length;
-  main().innerHTML = head("Confronto Direto", "Duas equipes por vez · arena 1,20 × 1,20 m · Fase preliminar (cada equipe joga 2 vezes) → Semifinais (1º×4º, 2º×3º) → Final",
+  const kNow = n ? Math.round(n * 2 / Math.max(1, new Set(prelims().flatMap(m => [m.a, m.b])).size)) : gamesPerTeam(teams().length);
+  main().innerHTML = head("Confronto Direto", `Duas equipes por vez · arena 1,20 × 1,20 m · Fase preliminar (cada equipe joga ${kNow} vezes) → Semifinais (1º×4º, 2º×3º) → Final`,
     `<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>`, "cup", !!live) +
     (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">CAMPEÃO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
-    (!n ? `<div class="card center stage"><h2>Fase preliminar</h2><p class="muted">${teams().length} equipes · cada equipe disputa exatamente 2 confrontos, sem repetição · ${teams().length >= 4 ? `${teams().length} confrontos` : "mínimo 4 equipes"}</p><button class="btn primary huge" onclick="generatePrelim()" ${teams().length < 4 ? "disabled" : ""}>🔀 Gerar fase preliminar</button></div>`
+    (!n ? `<div class="card center stage"><h2>Fase preliminar</h2><p class="muted">${teams().length} equipes · cada equipe disputa exatamente ${kNow} confrontos, sem repetição · ${teams().length >= 4 ? `<b>${teams().length * kNow / 2} confrontos</b>` : "mínimo 4 equipes"}</p><p class="muted small">Quantidade de jogos por equipe: em <b>Configurações → Confronto Direto</b>.</p><button class="btn primary huge" onclick="generatePrelim()" ${teams().length < 4 ? "disabled" : ""}>🔀 Gerar fase preliminar</button></div>`
       : `${live ? livePanel(live) : phaseTracker() + nextPanel()}
       <div class="cup-layout mt">${prelimCard()}${standingsCard()}</div>
       ${bracketCard()}`);
@@ -956,7 +1120,7 @@ function nextPanel() {
 }
 function livePanel(m) {
   const a = findTeam(m.a), b = findTeam(m.b), t = m.timer, ph = m.phase, fix = !!m._backup;
-  const phases = [["r1", "Round 1 · 2:00"], ["break", "Intervalo · 2:00"], ["r2", "Round 2 · 1:00"], ["review", "Resultado"]];
+  const phases = [["r1", `Round 1 · ${fmt(cfg().cupR1)}`], ["break", `Intervalo · ${fmt(cfg().cupBreak)}`], ["r2", `Round 2 · ${fmt(cfg().cupR2)}`], ["review", "Resultado"]];
   const idx = phases.findIndex(p => p[0] === ph);
   const bar = `<div class="roundbar">${phases.map((p, i) => `<span class="round-pill ${i === idx ? "active" : i < idx ? "past" : ""}">${p[1]}</span>`).join("")}</div>`;
   const statusTxt = ph === "review" ? (fix ? "CORRIGINDO RESULTADO" : "CONFERÊNCIA DO RESULTADO") : ph === "break" ? (t.status === "over" ? "INTERVALO ENCERRADO" : "INTERVALO PARA AJUSTES") : { idle: "PRONTO PARA INICIAR", running: `ROUND ${ph === "r1" ? 1 : 2} EM ANDAMENTO`, paused: "PAUSADO", over: "TEMPO ESGOTADO" }[t.status];
@@ -966,7 +1130,7 @@ function livePanel(m) {
       ${teamCell(tm)}
       <div class="pts">${sc}</div>
       <div class="muted small">Round 1: ${sideScore(m, side, 1)} · Round 2: ${sideScore(m, side, 2)}</div>
-      <div class="fighter-btns">${MATCH_EVENTS.map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"} aria-label="${esc(e.short)} para ${esc(tm?.name)}: ${esc(e.label)}"><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
+      <div class="fighter-btns">${matchEvents().map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"} aria-label="${esc(e.short)} para ${esc(tm?.name)}: ${esc(e.label)}"><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
       <button class="btn undo" onclick="matchUndo('${side}')" aria-label="Desfazer a última marcação de ${esc(tm?.name)}">↶ Desfazer última</button>
     </div>`;
   let ctrl = "";
@@ -988,13 +1152,13 @@ function livePanel(m) {
     <div class="live-top"><span class="eyebrow">${fix ? "CORREÇÃO · " : "EM ANDAMENTO · "}${esc(matchLabel(m)).toUpperCase()}</span>${bar}</div>
     <div class="live-grid">${fighter("a", a, sa)}
       <div class="live-center">
-        ${ph === "review" ? "" : `<div class="timer" data-timer="match">${fmt(left(t))}</div>`}
+        ${ph === "review" ? "" : `<div class="timer" data-timer="match">${fmt(left(t))}</div>${adjBtns("match", t)}`}
         <span class="status-txt s-${ph === "review" ? "over" : t.status}">${t.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</span>
         <div class="live-ctrl">${ctrl}</div>
       </div>
     ${fighter("b", b, sb)}</div>
     <details class="mt-s" ${logs && ph === "review" ? "open" : ""}><summary class="muted">Marcações (${m.rounds[1].events.length + m.rounds[2].events.length}) — clique em ✕ para remover uma específica</summary><div class="log">${logs || `<div class="muted small">Nenhuma marcação.</div>`}</div></details>
-    <div class="right"><button class="btn small ghost" onclick="cancelMatch()">${fix ? "✕ Descartar correção" : "✕ Cancelar confronto"}</button></div>
+    <div class="right">${ph === "r1" || ph === "r2" ? `<button class="btn small ghost" onclick="repeatRound()">🔁 Repetir Round ${ph === "r1" ? 1 : 2} (falha técnica)</button>` : ""}<button class="btn small ghost" onclick="cancelMatch()">${fix ? "✕ Descartar correção" : "✕ Cancelar confronto"}</button></div>
   </div>`;
 }
 function matchRow(m) {
@@ -1013,7 +1177,7 @@ function matchRow(m) {
 }
 function prelimCard() {
   return `<div class="card"><h2>Fase preliminar · ${prelims().length} confrontos</h2><div class="m-list">${prelims().map(matchRow).join("")}</div>
-    <p class="muted small mt-s">Cada equipe joga exatamente 2 vezes, sem confrontos repetidos${conflicts(prelims().map(m => [m.a, m.b])) ? ". Com este número de equipes não é possível evitar que alguma equipe jogue dois confrontos seguidos." : " e sem jogar duas vezes seguidas."}</p></div>`;
+    <p class="muted small mt-s">Cada equipe joga exatamente ${Math.round(prelims().length * 2 / Math.max(1, new Set(prelims().flatMap(m => [m.a, m.b])).size))} vezes, sem confrontos repetidos${conflicts(prelims().map(m => [m.a, m.b])) ? ". Com este número de equipes não é possível evitar que alguma equipe jogue dois confrontos seguidos." : " e sem jogar duas vezes seguidas."}</p></div>`;
 }
 function teamStatus(id, rows) {
   const live = liveMatch(), nm = nextMatch(), c = champion(), f = finalMatch();
@@ -1047,7 +1211,7 @@ function standingsCard() {
     ${reveal ? "" : `<p class="muted small">Resultados ocultos — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
     <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num hide-sm">Saldo</th><th class="num">Pts</th></tr></thead><tbody>${body}</tbody></table></div>
     ${blocking ? `<div class="notice warn mt-s"><b>Empate não resolvido entre os 4 primeiros.</b> ${reveal ? `Ajuste a ordem com ▲▼ conforme a decisão da Comissão Organizadora e confirme:` : "Revele a pontuação (👁️) para resolver."} ${reveal ? `<div class="mt-s"><button class="btn primary" onclick="confirmTieOrder()">✓ Confirmar ordem e gerar semifinais</button></div>` : ""}</div>` : ""}
-    <p class="muted small mt-s">Vitória 3 · Empate 1 · Derrota 0. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
+    <p class="muted small mt-s">Vitória ${cfg().winPts} · Empate ${cfg().drawPts} · Derrota ${cfg().lossPts}. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
 }
 function bracketCard() {
@@ -1129,7 +1293,7 @@ function sceneFree(cur) {
       <div class="tv-timer ${tm.status}" data-timer="free">${fmt(left(tm))}</div>
       <div class="tv-score"><span>PONTOS</span><b class="${total < 0 ? "minus" : ""}">${signed(total)}</b></div>
     </div>
-    <div class="tv-rules">+50 balão de outra cor · −50 balão da própria cor · −30 saída da arena</div>
+    <div class="tv-rules">${rulesFree()}</div>
     ${nx ? `<div class="tv-foot">A seguir: <b>${esc(teamName(nx.teamId))}</b> · Rodada ${nx.round}</div>` : ""}
   </div>`;
 }
@@ -1145,7 +1309,7 @@ function sceneMatch(m) {
       <div class="tv-x">×</div>
       <div class="tv-side b"><div class="tv-team">${esc(b?.name)}</div><div class="tv-school">${esc(schoolText(b))}</div><div class="tv-big">${sb}</div></div>
     </div>
-    <div class="tv-rules">+100 por balão adversário estourado · +30 quando o adversário sai da arena</div>
+    <div class="tv-rules">${rulesCup()}</div>
   </div>`;
 }
 function tvHidden(title) { return `<div class="tv tv-rank"><div class="tv-mode">${title}</div><div class="tv-hidden">🔒<b>Resultado será revelado em instantes</b></div></div>`; }
@@ -1200,7 +1364,8 @@ function openTelaoWindow() {
 }
 function fullTelao() {
   document.body.classList.add("telao-full");
-  const box = document.getElementById("tvFull"); box.classList.remove("hidden"); box.innerHTML = `<button class="tv-exit" onclick="exitTelao()">✕ Sair</button><div id="tvScene">${telaoScene()}</div>`;
+  const box = document.getElementById("tvFull"); box.classList.remove("hidden"); box.innerHTML = `<button class="tv-exit" onclick="exitTelao()">✕ Sair</button><div id="tvScene">${telaoScene()}</div><div id="tvPops" aria-hidden="true"></div>`;
+  tvPops();
   document.documentElement.requestFullscreen?.().catch(() => { });
   updateTimers();
 }
@@ -1211,8 +1376,33 @@ function exitTelao() {
 function renderTelaoWindow() {
   document.body.classList.add("telao-window");
   const box = document.getElementById("tvFull"); box.classList.remove("hidden");
-  box.innerHTML = `<div id="tvScene">${telaoScene()}</div><div class="tv-hint">Duplo clique = tela cheia</div><div id="netWarn" class="net-warn ${NET.on && !NET.ok ? "" : "hidden"}">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
-  updateTimers();
+  if (!document.getElementById("tvScene")) {
+    box.innerHTML = `<div id="tvScene"></div><div id="tvPops" aria-hidden="true"></div><div class="tv-hint">Duplo clique = tela cheia</div><button id="soundHint" class="tv-sound hidden" onclick="getAudio();this.classList.add('hidden')">🔈 Clique aqui para ativar o som do telão</button><div id="netWarn" class="net-warn hidden">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
+  }
+  document.getElementById("tvScene").innerHTML = telaoScene();
+  document.getElementById("netWarn").classList.toggle("hidden", !(NET.on && !NET.ok));
+  document.getElementById("soundHint").classList.toggle("hidden", !cfg().soundTv || getAudio()?.state === "running");
+  tvPops(); updateTimers();
+}
+/* Mostra um "+50"/"+100" grande no telão a cada nova marcação */
+const popSeen = new Set(); let popInit = false;
+function tvPops() {
+  const layer = document.getElementById("tvPops"); if (!layer) return;
+  const evs = [];
+  const cur = state.free.current;
+  if (cur) cur.events.forEach(e => evs.push({ e, side: "c", color: cur.color?.hex }));
+  const m = liveMatch();
+  if (m) [1, 2].forEach(r => m.rounds[r].events.forEach(e => evs.push({ e, side: e.side, color: e.pts >= 0 ? "#2463c9" : "#d33434" })));
+  const fresh = evs.filter(x => !popSeen.has(x.e.id));
+  evs.forEach(x => popSeen.add(x.e.id));
+  if (!popInit) { popInit = true; return; }
+  fresh.slice(-3).forEach(x => {
+    const d = document.createElement("div");
+    d.className = `tv-pop ${x.side} ${x.e.pts < 0 ? "neg" : "pos"}`;
+    d.style.setProperty("--c", x.color || "#159447");
+    d.innerHTML = `<b>${esc(signed(x.e.pts))}</b><span>${esc(x.e.label)}</span>`;
+    layer.appendChild(d); setTimeout(() => d.remove(), 1900);
+  });
 }
 
 /* ============================ PLANILHA EXCEL (.xlsx) ============================ */
@@ -1275,7 +1465,7 @@ function resultSheets() {
   const vice = f && winnerOf(f) ? findTeam(winnerOf(f) === f.a ? f.b : f.a) : null;
   const gr = generalRanking(), st = standings(), fr = freeRanking(), done = prelimDone();
   const crits = state.settings.tiebreak.filter(x => x.on).map(x => TIEBREAKS[x.key].label).join(" → ") || "nenhum";
-  const count = (a, pts) => a.events.filter(e => e.pts === pts).length;
+  const countL = (a, label) => a.events.filter(e => e.label === label).length;
   const situation = id => {
     if (champ && champ.id === id) return "Campeão";
     if (vice && vice.id === id) return "Vice-campeão";
@@ -1292,7 +1482,7 @@ function resultSheets() {
       ["Arena Livre — critério da classificação", state.settings.freeRankMode === "melhor" ? "Melhor rodada" : "Soma das rodadas"],
       ["Arena Livre — 1º lugar", fs.done ? fr[0]?.team.name || "" : "A definir"],
       ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
-      ["Confronto Direto — pontuação", "Vitória 3 · Empate 1 · Derrota 0"], ["Confronto Direto — desempate", `${crits} → decisão da comissão`],
+      ["Confronto Direto — pontuação", `Vitória ${cfg().winPts} · Empate ${cfg().drawPts} · Derrota ${cfg().lossPts} · ${rulesCup()} · ${rulesCupTime()}`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — desempate", `${crits} → decisão da comissão`],
       ["Campeão (Confronto Direto)", champ ? champ.name : "A definir"], ["Vice-campeão (Confronto Direto)", vice ? vice.name : "A definir"],
       ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"})`],
       ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
@@ -1300,28 +1490,43 @@ function resultSheets() {
       ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
     { name: "Arena - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", ...Array.from({ length: R }, (_, i) => `Rodada ${i + 1}`), "Tentativas", "Soma", "Melhor rodada", state.settings.freeRankMode === "melhor" ? "Pontuação (melhor rodada)" : "Pontuação (soma)"],
       ...fr.map((x, i) => [i + 1, noLabel(x.team), x.team.name, schoolText(x.team), ...x.scores.map(v => v === null ? "" : v), x.done, x.sum, x.done ? x.best : "", x.total])] },
-    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor (nº)", "Cor", "Balões de outra cor (+50)", "Balões da própria cor (−50)", "Saídas da arena (−30)", "Pontos", "Registrado em"],
-      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.number ?? "", a.color?.name ?? "", count(a, 50), count(a, -50), count(a, -30), attemptTotal(a), fmtDate(a.at)]; })] },
+    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor (nº)", "Cor", "Balões de outra cor", "Balões da própria cor", "Saídas da arena", "Pontos", "Repetições (falha técnica)", "Registrado em"],
+      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.number ?? "", a.color?.name ?? "", countL(a, "Balão de outra cor"), countL(a, "Balão da própria cor"), countL(a, "Saiu da arena"), attemptTotal(a), (a.repeats || []).map(x => `${fmtDate(x.at)}: ${x.reason}`).join(" | "), fmtDate(a.at)]; })] },
     { name: "Arena - Marcações", rows: [["Rodada", "Equipe", "Escola", "Tempo", "Evento", "Pontos"],
       ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).flatMap(a => { const t = findTeam(a.teamId); return a.events.map(e => [a.round, t?.name || "Equipe removida", schoolText(t), e.t, e.label, e.pts]); })] },
-    { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Situação"],
-      ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin ? sideScore(m, "b") : "", fin ? (m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar"]; })] },
-    { name: "Confronto - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", "Jogos", "Vitórias", "Empates", "Derrotas", "Pontos marcados", "Pontos sofridos", "Saldo", "Pontos (3/1/0)", "Situação"],
+    { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Situação", "Repetições (falha técnica)"],
+      ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin ? sideScore(m, "b") : "", fin ? (m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar", (m.repeats || []).map(x => `Round ${x.round} — ${fmtDate(x.at)}: ${x.reason}`).join(" | ")]; })] },
+    { name: "Confronto - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", "Jogos", "Vitórias", "Empates", "Derrotas", "Pontos marcados", "Pontos sofridos", "Saldo", `Pontos (${cfg().winPts}/${cfg().drawPts}/${cfg().lossPts})`, "Situação"],
       ...st.map(r => [r.pos, noLabel(r.team), r.team.name, schoolText(r.team), r.J, r.V, r.E, r.D, r.PM, r.PS, r.SG, r.P, situation(r.team.id) || (done ? (r.pos <= 4 ? "Classificado para a semifinal" : "Eliminado na fase preliminar") : "")])] },
     { name: "Confronto - Marcações", rows: [["Fase", "Confronto", "Round", "Tempo", "Equipe", "Escola", "Evento", "Pontos"],
       ...allMatches.filter(m => m.status === "done").flatMap(m => [1, 2].flatMap(r => m.rounds[r].events.map(e => { const t = findTeam(e.side === "a" ? m.a : m.b); return [stageName(m), matchName(m), r, e.t, t?.name || "", schoolText(t), e.label, e.pts]; })))] },
     { name: "Classificação Geral", rows: [["Posição", "Nº", "Equipe", "Escola", "Arena Livre", "Confronto Direto (pontos marcados)", "Total"],
-      ...gr.map((r, i) => [i + 1, noLabel(r.team), r.team.name, schoolText(r.team), r.arena, r.cup, r.total])] }
+      ...gr.map((r, i) => [i + 1, noLabel(r.team), r.team.name, schoolText(r.team), r.arena, r.cup, r.total])] },
+    { name: "Histórico", rows: [["Data e hora", "Registro"], ...state.log.map(x => [fmtDate(x.at), x.msg])] }
   ];
 }
+function downloadBlob(blob, name) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const stamp = () => { const d = new Date(), z = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}_${z(d.getHours())}h${z(d.getMinutes())}`; };
 function exportXlsx() {
-  try {
-    const blob = buildXlsx(resultSheets());
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `robosapiens-estoura-baloes-resultados-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-    toast("Planilha exportada");
-  } catch (e) { console.error(e); toast("Não foi possível gerar a planilha"); }
+  try { downloadBlob(buildXlsx(resultSheets()), `robosapiens-estoura-baloes-resultados-${stamp()}.xlsx`); toast("Planilha exportada"); }
+  catch (e) { console.error(e); warn("Não foi possível gerar a planilha"); }
+}
+// Ao fim de cada etapa, baixa sozinho a planilha e o backup JSON (pasta Downloads)
+function autoBackup(label, title) {
+  if (TELAO_WINDOW || !cfg().autoBackup) return;
+  logEv(`Backup automático: ${title}`);
+  save();
+  setTimeout(() => {
+    try {
+      downloadBlob(buildXlsx(resultSheets()), `robosapiens-estoura-baloes-${label}-${stamp()}.xlsx`);
+      setTimeout(() => downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${label}-${stamp()}.json`), 600);
+      toast(`💾 Backup automático (${title}) salvo na pasta Downloads`);
+    } catch (e) { console.error(e); warn("Não foi possível gerar o backup automático"); }
+  }, 500);
 }
 
 /* ============================ CONFIGURAÇÕES ============================ */
@@ -1333,13 +1538,36 @@ function config() {
       <div class="card"><h2>📊 Planilha de resultados</h2><p class="muted small">Arquivo Excel (.xlsx) com todas as etapas: equipes, Arena Livre (classificação, tentativas e cada marcação), Confronto Direto (jogos, classificação e cada marcação) e Classificação Geral.</p><div class="actions mt-s"><button class="btn primary" onclick="exportXlsx()">📊 Exportar planilha (Excel)</button></div></div>
       <div class="card"><h2>💾 Backup</h2><div class="actions"><button class="btn primary" onclick="exportData()">⬇ Exportar JSON</button><label class="btn file">⬆ Importar JSON<input id="importFile" type="file" accept=".json,application/json" hidden></label></div><p class="muted small mt-s">Os dados ficam salvos neste navegador. Exporte um backup ao final de cada etapa.</p></div>
       <div class="card"><h2>🎈 Arena Livre</h2><div class="form-grid">
-        <div><label>Rodadas por equipe</label><select onchange="setSetting('freeRounds',this.value)">${[1, 2, 3, 4].map(n => `<option ${s.freeRounds === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+        <div><label>Rodadas por equipe</label><select onchange="setSetting('freeRounds',this.value)">${[1, 2, 3, 4, 5].map(n => `<option ${s.freeRounds === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div><label>Tempo por tentativa (s)</label><input type="number" min="5" max="600" value="${s.freeSeconds}" onchange="setSetting('freeSeconds',this.value)"></div>
         <div class="full"><label>Classificação da Arena Livre</label><select onchange="setSetting('freeRankMode',this.value)"><option value="soma" ${s.freeRankMode === "soma" ? "selected" : ""}>Soma das rodadas</option><option value="melhor" ${s.freeRankMode === "melhor" ? "selected" : ""}>Melhor rodada</option></select></div>
-        <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
+        <div><label>Balão de outra cor (+ pontos)</label><input type="number" min="0" max="1000" value="${s.freeOther}" onchange="setSetting('freeOther',this.value)"></div>
+        <div><label>Balão da própria cor (− pontos)</label><input type="number" min="0" max="1000" value="${s.freeOwn}" onchange="setSetting('freeOwn',this.value)"></div>
+        <div><label>Saída da arena (− pontos)</label><input type="number" min="0" max="1000" value="${s.freeExit}" onchange="setSetting('freeExit',this.value)"></div>
         <div class="full"><label class="check"><input type="checkbox" ${s.freeMinZero ? "checked" : ""} onchange="setSetting('freeMinZero',this.checked)"> Não permitir pontuação negativa em uma tentativa (mínimo 0)</label></div>
-      </div><p class="muted small mt-s">Confirme essas opções com o regulamento da competição.</p></div>
+      </div><p class="muted small mt-s">Padrão: 4 rodadas (de 1 a 5) · 30 s · +50 / −50 / −30. A Arena Livre também pode ser encerrada antes, na própria tela, ao fim de uma rodada. Mudanças de pontuação valem para as próximas marcações.</p></div>
+      <div class="card"><h2>⚔️ Confronto Direto</h2><div class="form-grid">
+        <div><label>Round 1 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR1}" onchange="setSetting('cupR1',this.value)"></div>
+        <div><label>Intervalo (segundos)</label><input type="number" min="0" max="900" value="${s.cupBreak}" onchange="setSetting('cupBreak',this.value)"></div>
+        <div><label>Round 2 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR2}" onchange="setSetting('cupR2',this.value)"></div>
+        <div><label>Balão adversário estourado (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupBalloon}" onchange="setSetting('cupBalloon',this.value)"></div>
+        <div><label>Adversário saiu da arena (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupExit}" onchange="setSetting('cupExit',this.value)"></div>
+        <div><label>Classificação: vitória / empate / derrota</label><div class="tri"><input type="number" min="0" max="10" value="${s.winPts}" onchange="setSetting('winPts',this.value)" aria-label="Pontos por vitória"><input type="number" min="0" max="10" value="${s.drawPts}" onchange="setSetting('drawPts',this.value)" aria-label="Pontos por empate"><input type="number" min="0" max="10" value="${s.lossPts}" onchange="setSetting('lossPts',this.value)" aria-label="Pontos por derrota"></div></div>
+        <div class="full"><label>Fase preliminar</label><select onchange="setSetting('cupGames',this.value)">
+          <option value="2" ${s.cupGames === 2 ? "selected" : ""}>2 jogos por equipe · ${teams().length} confrontos</option>
+          <option value="4" ${s.cupGames === 4 ? "selected" : ""} ${teams().length < 5 ? "disabled" : ""}>4 jogos por equipe · ${teams().length * 2} confrontos</option></select>
+          ${prelims().length ? `<p class="muted small">A fase preliminar atual tem ${prelims().length} confrontos. A mudança vale ao gerar a fase preliminar novamente.</p>` : ""}</div>
+        <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
+      </div><p class="muted small mt-s">Padrão: 2 jogos por equipe · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
+      <div class="card"><h2>🔊 Sons e backup</h2>
+        <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC (bipe aos 10 s e 5 s, sinal no fim)</label>
+        <label class="check mt-s"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
+        <label class="check mt-s"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label>
+        <div class="actions mt-s"><button class="btn small" onclick="getAudio();beep('warn');setTimeout(()=>beep('end'),400)">🔈 Testar som</button></div></div>
       <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
+      <details class="card fold"><summary><b>📜 Histórico de alterações</b> <span class="muted small">(${state.log.length})</span></summary>
+        <div class="log mt-s">${state.log.slice(-300).reverse().map(x => `<div class="log-item"><span><b>${esc(fmtDate(x.at))}</b> · ${esc(x.msg)}</span></div>`).join("") || `<div class="muted small">Nenhum registro ainda.</div>`}</div>
+        <p class="muted small mt-s">Registro de sorteios, resultados, correções, anulações, repetições e ajustes. Também vai na planilha Excel (aba Histórico).</p></details>
       <div class="card"><h2>⚠️ Reiniciar</h2><div class="actions col">
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
         ${prelims().length ? `<button class="btn danger" onclick="generatePrelim()">↻ Gerar novamente a fase preliminar (apaga confrontos e resultados)</button>` : ""}
@@ -1353,16 +1581,14 @@ function setSetting(k, v) {
     const n = Math.round(num(v, 4)), extra = state.free.attempts.filter(a => a.round > n).length;
     if (extra && !confirm(`Existem ${extra} tentativa(s) registradas acima da rodada ${n}. Elas ficarão fora da classificação (não são apagadas). Continuar?`)) return render();
   }
-  state.settings[k] = v; state = normalize(state); save(); toast("Configuração salva"); render();
+  const old = state.settings[k];
+  state.settings[k] = v; state = normalize(state);
+  if (String(old) !== String(state.settings[k])) logEv(`Configuração alterada: ${k} = ${state.settings[k]} (antes: ${old})`);
+  save(); toast("Configuração salva"); render();
 }
 function toggleTb(i) { state.settings.tiebreak[i].on = !state.settings.tiebreak[i].on; save(); render(); }
 function moveTb(i, d) { const a = state.settings.tiebreak, j = i + d; if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; save(); render(); }
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `robosapiens-estoura-baloes-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
+function exportData() { downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${stamp()}.json`); }
 function importData(e) {
   const file = e.target.files[0]; if (!file) return;
   const r = new FileReader();
@@ -1371,14 +1597,14 @@ function importData(e) {
       const data = JSON.parse(r.result);
       if (!data || !Array.isArray(data.teams)) throw new Error("formato");
       if (!confirm("Substituir todos os dados atuais pelos do arquivo?")) return;
-      state = normalize(data); save(); toast("Dados importados"); render();
+      state = normalize(data); logEv("Dados importados de arquivo JSON"); save(); toast("Dados importados"); render();
     } catch (err) { toast("Arquivo JSON inválido"); }
   };
   r.readAsText(file);
 }
-function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [], draws: {} }; save(); toast("Arena Livre zerada"); render(); }
-function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) return; state.cup = { matches: [], liveId: null, manualOrder: [] }; save(); toast("Confronto Direto zerado"); render(); }
-function resetAll() { if (!confirm("Apagar tudo e voltar ao cadastro inicial das equipes?")) return; state = normalize(fresh()); save(); toast("Competição reiniciada"); render(); }
+function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [], draws: {} }; logEv("Arena Livre zerada (tentativas e cores apagadas)"); save(); toast("Arena Livre zerada"); render(); }
+function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) return; state.cup = { matches: [], liveId: null, manualOrder: [] }; logEv("Confronto Direto zerado"); save(); toast("Confronto Direto zerado"); render(); }
+function resetAll() { if (!confirm("Apagar tudo e voltar ao cadastro inicial das equipes?")) return; const log = state.log; state = normalize(fresh()); state.log = log; logEv("Competição reiniciada (tudo apagado, cadastro inicial restaurado)"); save(); toast("Competição reiniciada"); render(); }
 
 /* ============================ MODAL / EVENTOS GLOBAIS ============================ */
 let modalReturn = null;
@@ -1422,18 +1648,19 @@ function updateTimers() {
     el.classList.toggle("over", t.status === "over" || (t.status === "running" && l <= 0));
   });
 }
-function refreshTelaoFull() { const s = document.getElementById("tvScene"); if (s && document.body.classList.contains("telao-full")) { s.innerHTML = telaoScene(); updateTimers(); } }
+function refreshTelaoFull() { const s = document.getElementById("tvScene"); if (s && document.body.classList.contains("telao-full")) { s.innerHTML = telaoScene(); tvPops(); updateTimers(); } }
 
 setInterval(() => {
+  countdownBeep(state.free.current?.timer); countdownBeep(liveMatch()?.timer);
   if (TELAO_WINDOW) { updateTimers(); return; }
   let changed = false;
   const cur = state.free.current;
   if (cur && cur.timer.status === "running" && left(cur.timer) <= 0) {
-    cur.timer.status = "over"; cur.timer.remaining = 0; changed = true; beep(); toast("⏱ Tempo esgotado — registre o resultado");
+    cur.timer.status = "over"; cur.timer.remaining = 0; changed = true; toast("⏱ Tempo esgotado — registre o resultado");
   }
   const m = liveMatch();
   if (m && m.timer.status === "running" && left(m.timer) <= 0) {
-    m.timer.status = "over"; m.timer.remaining = 0; changed = true; beep();
+    m.timer.status = "over"; m.timer.remaining = 0; changed = true;
     toast(m.phase === "break" ? "⏱ Fim do intervalo — vá para o Round 2" : `⏱ Fim do Round ${m.phase === "r1" ? 1 : 2}`);
   }
   if (changed) { save(); render(); refreshTelaoFull(); } else updateTimers();
@@ -1532,4 +1759,5 @@ function startUI() {
   updateNetPill();
   render();
 }
+["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { getAudio(); document.getElementById("soundHint")?.classList.add("hidden"); }, { once: true }));
 detectServer().finally(startUI);

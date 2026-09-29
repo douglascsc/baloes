@@ -21,7 +21,9 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 
 ## Arena Livre
 - **Passo 1 — Sorteio das cores:** feito uma única vez, antes de chamar as equipes. Cada equipe recebe uma cor, que vale para todas as rodadas. As cores só se repetem entre equipes quando há mais equipes que cores: com 4 cores e 7 equipes, cada cor fica com até 2 equipes. A cor pode ser ajustada manualmente, e o telão mostra o quadro equipe → cor.
-- **Passo 2 — Chamar para a arena:** uma equipe por vez, até 4 rodadas (configurável de 1 a 4), 30 s por tentativa.
+- **Passo 2 — Chamar para a arena:** uma equipe por vez, de 1 a 5 rodadas (padrão 4), 30 s por tentativa.
+- **Encerrar a etapa:** ao fim de cada rodada, o sistema pergunta se continua ou **encerra a Arena Livre ali** (ex.: com 2 ou 3 rodadas). Encerrada, aparece o botão **⚔️ Ir para o Confronto Direto**. Também dá para reabrir mais rodadas.
+- **Falha técnica:** **🔁 Repetir tentativa** zera as marcações e o cronômetro, registrando o motivo. Uma tentativa já registrada pode ser **anulada** com motivo.
 - +50 por balão de outra cor · −50 por balão da própria cor · −30 por sair da arena.
 - Toda tentativa começa em **0**. A pontuação é calculada somente a partir das marcações da tentativa.
 - **↶ Desfazer última** e **✕** em cada marcação corrigem erros. Uma tentativa registrada pode ser **anulada** no histórico.
@@ -33,6 +35,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
+- **Jogos por equipe na preliminar (Configurações):** **2** (7 equipes → 7 confrontos) ou **4** (7 equipes → 14 confrontos), sempre sem repetir adversário.
 - **Fase preliminar:** funciona com qualquer número de equipes (mínimo 4). N equipes geram N confrontos: 6 → 6, 7 → 7, 8 → 8, 10 → 10. Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas. A exceção é com 4 equipes, em que isso é matematicamente impossível; o sistema avisa. Os 4 primeiros vão às semifinais.
 - Confronto: Round 1 (2 min) → intervalo (2 min, automático) → Round 2 (1 min) → conferência do resultado.
 - +100 por balão adversário · +30 quando o adversário sai da arena.
@@ -82,3 +85,24 @@ Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica
 - **Barra de espaço:** inicia e pausa o cronômetro da Arena Livre ou do round em andamento.
 - **Topo da tela:** o indicador **📺 Telão** mostra o que o público está vendo e se a pontuação está visível.
 - **Ações recusadas** (por exemplo, marcar pontos antes de iniciar) aparecem em destaque no topo, sem cobrir os botões.
+
+## Configurações de regras
+Em **Config.**, dá para ajustar, sem mexer no código:
+- **Arena Livre:** rodadas (1 a 5), tempo por tentativa e pontos (+ outra cor, − própria cor, − saída).
+- **Confronto Direto:** jogos por equipe (2 ou 4), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
+
+Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
+
+## Durante a competição
+- **Ajuste do cronômetro:** botões **−5 s / +5 s** abaixo do cronômetro (ex.: o juiz iniciou atrasado). Nunca passa do tempo máximo.
+- **Sons:** bipe curto aos 10 s e aos 5 s e sinal no fim. Pode tocar também no telão, se ativado em Configurações; é preciso clicar uma vez na tela do telão para liberar o som.
+- **Destaque no telão:** cada marcação aparece grande ("+50", "+100") por um instante.
+- **Falha técnica no Confronto:** **🔁 Repetir Round** zera o round atual (marcações e cronômetro), registrando o motivo.
+- **Backup automático:** ao fim da Arena Livre, da fase preliminar e da final, o sistema baixa sozinho a planilha e o JSON na pasta Downloads (pode ser desligado).
+- **Histórico de alterações:** sorteios, resultados, correções, anulações, repetições, ajustes de tempo e mudanças de configuração, com data e hora. Fica em Config. e na aba "Histórico" da planilha.
+
+## Súmulas para imprimir (pasta `sumulas/`)
+- `Sumula-Confronto-Direto.docx`: uma página por confronto (Preliminar 1 a 14, Semifinais 1 e 2, Final e uma reserva). Com 2 jogos por equipe, use só as 7 primeiras preliminares.
+- `Sumula-Arena-Livre.docx`: uma página por rodada (1 a 5), já com as 7 equipes e escolas.
+
+Para regerar (ex.: mudou alguma equipe): `npm install docx` e depois `node sumulas/gerar-sumulas.js`.
