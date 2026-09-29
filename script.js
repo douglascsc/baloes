@@ -67,13 +67,18 @@ const INITIAL_TEAMS = [
 ];
 
 // Cronograma padrão (editável na aba Cronograma). **texto** aparece em negrito.
+const LUNCH_SCHEDULE = [
+  ["11:30", "12:00", "Almoço/Treino Livre", "Início do intervalo para almoço, com a arena liberada para treino livre das equipes."],
+  ["12:00", "13:00", "Almoço", "Pausa para almoço e descanso das equipes."],
+  ["13:00", "13:30", "Almoço/Treino Livre", "Final do intervalo para almoço, com a arena liberada para treino livre das equipes."]
+];
 const DEFAULT_SCHEDULE = [
   ["08:00", "09:30", "Credenciamento e Treino Livre", "Credenciamento das equipes, identificação dos participantes, montagem e testes dos robôs e treino livre na arena."],
   ["09:30", "10:00", "Abertura Oficial", "Boas-vindas, apresentação da modalidade, orientações gerais e início oficial da competição."],
   ["10:00", "10:15", "Reunião Técnica e Sorteio", "Apresentação das regras, critérios de pontuação e orientações de segurança. Sorteio da numeração das equipes, definição das cores e esclarecimento de dúvidas."],
   ["10:15", "10:30", "Preparação para a Etapa 1", "Organização das equipes, conferência dos robôs, identificação das equipes e preparação da arena."],
   ["10:30", "11:30", "Etapa 1 — Arena Livre", "Cada equipe terá **até 30 segundos** para estourar o maior número possível de balões das demais equipes, conforme as regras da modalidade."],
-  ["11:30", "13:30", "Intervalo para Almoço", "Pausa para almoço e descanso das equipes e organização da arena."],
+  ...LUNCH_SCHEDULE,
   ["13:30", "13:45", "Preparação para a Etapa 2", "Organização das equipes classificadas, conferência dos robôs, definição dos confrontos e preparação da arena."],
   ["13:45", "16:00", "Etapa 2 — Confronto Direto", "Confrontos entre duas equipes. Cada partida será disputada em **2 rounds**, com intervalo de até **2 minutos** entre eles."],
   ["16:00", "17:00", "Apuração e Premiação", "Conferência dos resultados, definição da classificação final e entrega das premiações às equipes."],
@@ -223,7 +228,12 @@ function normalize(raw) {
     });
     s.schedule.sort((a, b) => (a.start || "99").localeCompare(b.start || "99") || (a.end || "").localeCompare(b.end || ""));
   }
-  s.schedV = 2;
+  // Atualização única: o almoço de 11h30 às 13h30 vira Almoço/Treino Livre · Almoço · Almoço/Treino Livre
+  if (!(num(s.schedV, 0) >= 3)) {
+    const i = s.schedule.findIndex(x => x.title === "Intervalo para Almoço" && x.start === "11:30" && x.end === "13:30");
+    if (i >= 0) s.schedule.splice(i, 1, ...LUNCH_SCHEDULE.map(([start, end, title, detail]) => ({ id: uid(), start, end, title, detail })));
+  }
+  s.schedV = 3;
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
   s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
   s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
@@ -1375,7 +1385,7 @@ function geral() {
 }
 function sceneCrono() {
   const n = nowHHMM();
-  return `<div class="tv tv-rank tv-crono"><div class="tv-mode">🗓️ CRONOGRAMA · ROBÔ ESTOURA BALÃO</div><div class="tv-table">${state.schedule.map(x => { const st = scheduleStatus(x, n); return `<div class="tv-row st-${st} ${st === "now" ? "top" : ""}"><span class="p tv-h">${hFmt(x.start)}–${hFmt(x.end)}</span><span class="n">${esc(x.title)}</span><b>${st === "now" ? "● AGORA" : ""}</b></div>`; }).join("")}</div></div>`;
+  return `<div class="tv tv-rank tv-crono ${state.schedule.length > 10 ? "dense" : ""}"><div class="tv-mode">🗓️ CRONOGRAMA · ROBÔ ESTOURA BALÃO</div><div class="tv-table">${state.schedule.map(x => { const st = scheduleStatus(x, n); return `<div class="tv-row st-${st} ${st === "now" ? "top" : ""}"><span class="p tv-h">${hFmt(x.start)}–${hFmt(x.end)}</span><span class="n">${esc(x.title)}</span><b>${st === "now" ? "● AGORA" : ""}</b></div>`; }).join("")}</div></div>`;
 }
 function sceneGeral() {
   if (!state.display.reveal) return tvHidden("🏆 CLASSIFICAÇÃO GERAL");

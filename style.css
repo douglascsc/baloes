@@ -417,6 +417,11 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .tv-crono .tv-row .n{font-size:2.3cqw}.tv-crono .tv-h{font-size:2cqw;white-space:nowrap;color:#3a4640}
 .tv-crono .tv-row b{font-size:1.6cqw;color:#c62828;letter-spacing:.1cqw}
 .tv-crono .tv-row.st-past{opacity:.6}
+/* mais de 10 atividades: linhas mais compactas para caber tudo na tela */
+.tv-crono.dense{gap:.5cqw;padding-top:1.4cqw}
+.tv-crono.dense .tv-table{gap:.35cqw}
+.tv-crono.dense .tv-row{padding:.3cqw 2cqw}
+.tv-crono.dense .tv-row .n{font-size:2cqw}.tv-crono.dense .tv-h{font-size:1.8cqw}
 .tv-crono .tv-row.st-now{background:#fff1f1;box-shadow:inset .6cqw 0 #e53935}
 .beep-opts{margin:8px 0 0 26px;padding-left:12px;border-left:3px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .beep-opts.off{opacity:.55}
