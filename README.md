@@ -5,7 +5,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 
 ## Arquivos
 - `index.html`, `style.css`, `script.js`: o sistema (abre direto no navegador).
-- `assets/`: logotipos.
+- `assets/`: logotipos (`logo-sumula.js` é o logo usado nas súmulas em Word).
 - `servidor.py` + `iniciar-servidor.bat`: modo com dois computadores (telão em outro PC), opcional.
 - `sumulas/`: súmulas em Word para imprimir e o gerador delas.
 
@@ -104,7 +104,10 @@ Cada marcação guarda os pontos do momento: mudar a regra não altera o que já
 - **Backup automático:** ao fim da Arena Livre, da fase preliminar e da final, o sistema baixa sozinho a planilha e o JSON na pasta Downloads (pode ser desligado).
 - **Histórico de alterações:** sorteios, resultados, correções, anulações, repetições, ajustes de tempo e mudanças de configuração, com data e hora. Fica em Config. e na aba "Histórico" da planilha.
 
-## Súmulas para imprimir (pasta `sumulas/`)
+## Súmulas para imprimir (Word)
+**Pelo sistema (recomendado):** em **Config. → 📝 Súmulas para imprimir**, os botões baixam o `.docx` da Arena Livre (uma página por rodada) e do Confronto Direto (uma página por confronto, mais semifinais, final e uma reserva). Sem internet. As súmulas saem com as equipes, as cores sorteadas, os confrontos já gerados e os tempos e pontos configurados no momento; se algo mudar, gere de novo. Antes de gerar a fase preliminar, as páginas dos confrontos saem em branco, na quantidade da configuração atual.
+
+**Arquivos prontos (pasta `sumulas/`), com as 7 equipes da inscrição:**
 - `Sumula-Confronto-Direto.docx`: uma página por confronto (Preliminar 1 a 21, Semifinais 1 e 2, Final e uma reserva). Imprima só as preliminares necessárias: 7, 14 ou 21.
 - `Sumula-Arena-Livre.docx`: uma página por rodada (1 a 5), já com as 7 equipes e escolas.
 

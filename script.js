@@ -1532,7 +1532,7 @@ function zipStore(files, type) {
   const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
   const d = new Date(), time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
   files.forEach(f => {
-    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const name = enc.encode(f.name), data = f.data instanceof Uint8Array ? f.data : enc.encode(f.data), crc = crc32(data);
     const h = new DataView(new ArrayBuffer(30));
     h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
     h.setUint16(10, time, true); h.setUint16(12, date, true); h.setUint32(14, crc, true); h.setUint32(18, data.length, true);
@@ -1648,6 +1648,117 @@ function autoBackup(label, title) {
   }, 500);
 }
 
+/* ============================ SÚMULAS EM WORD (.docx) ============================ */
+/* Mesma ideia da planilha: o .docx (WordprocessingML) é montado aqui e empacotado
+   pelo zipStore. Usa as equipes, cores sorteadas, confrontos e regras atuais. */
+const DX = { green: "0F7A3A", gray: "5F6B64", light: "EEF6F0", total: "DFF3E4", border: "7A857F" };
+const dRun = (text, o = {}) => `<w:r><w:rPr>${o.bold ? "<w:b/>" : ""}${o.color ? `<w:color w:val="${o.color}"/>` : ""}<w:sz w:val="${o.size || 20}"/></w:rPr><w:t xml:space="preserve">${xesc(text)}</w:t></w:r>`;
+const dPara = (runs, o = {}) => `<w:p><w:pPr>${o.rule ? `<w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="${DX.green}"/></w:pBdr>` : ""}<w:spacing w:before="${o.before || 0}" w:after="${o.after ?? 80}"/>${o.align ? `<w:jc w:val="${o.align}"/>` : ""}</w:pPr>${[].concat(runs).join("")}</w:p>`;
+const dLine = (label, w = 3000) => [dRun(label + " ", { bold: true }), dRun("_".repeat(Math.round(w / 110)), { color: DX.gray })];
+const dBox = label => dRun(`☐ ${label}     `);
+const dPageBreak = () => `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+function dCell(content, w, o = {}) {
+  const b = `w:val="single" w:sz="6" w:space="0" w:color="${DX.border}"`;
+  const paras = [].concat(content).map(c => c.startsWith("<w:p>") ? c : dPara(dRun(c, { bold: o.bold, size: o.size, color: o.color }), { align: o.align, after: 0 })).join("");
+  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${o.span ? `<w:gridSpan w:val="${o.span}"/>` : ""}<w:tcBorders><w:top ${b}/><w:left ${b}/><w:bottom ${b}/><w:right ${b}/></w:tcBorders>${o.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>` : ""}<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr>${paras}</w:tc>`;
+}
+const dRow = (cells, h) => `<w:tr><w:trPr><w:cantSplit/>${h ? `<w:trHeight w:val="${h}" w:hRule="atLeast"/>` : ""}</w:trPr>${cells.join("")}</w:tr>`;
+const dTable = (widths, rows) => `<w:tbl><w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${widths.map(w => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid>${rows.join("")}</w:tbl>`;
+let dPicId = 0;
+function dHeader(title, subtitle) {
+  // logo 300×200 px → 75×50 px no documento (1 px = 9525 EMU)
+  const id = ++dPicId, cx = 714375, cy = 476250;
+  const logo = window.SUMULA_LOGO ? `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="Logo ${id}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>` : "";
+  return dPara([logo, dRun(`${logo ? "     " : ""}ROBOSAPIENS 2026 · IFSul Campus Sapiranga · Robô Estoura Balão`, { bold: true, color: DX.gray })], { after: 60 }) +
+    dPara(dRun(title, { bold: true, size: 34, color: DX.green }), { after: 20, rule: true }) +
+    dPara(dRun(subtitle, { size: 18, color: DX.gray }), { after: 140 });
+}
+function buildDocx(body, landscape, footerText) {
+  const NS = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`;
+  const X = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`;
+  const pg = landscape ? `<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>` : `<w:pgSz w:w="11906" w:h="16838"/>`;
+  const doc = `${X}<w:document ${NS}><w:body>${body}<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/>${pg}<w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850" w:header="425" w:footer="425" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const styles = `${X}<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:lang w:val="pt-BR"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="80"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>`;
+  const footer = `${X}<w:ftr ${NS}>${dPara(dRun(footerText, { size: 14, color: DX.gray }), { align: "center", after: 0 })}</w:ftr>`;
+  const logo = window.SUMULA_LOGO ? Uint8Array.from(atob(window.SUMULA_LOGO), ch => ch.charCodeAt(0)) : null;
+  const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const files = [
+    { name: "[Content_Types].xml", data: `${X}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>` },
+    { name: "_rels/.rels", data: `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", data: `${X}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="${R}/styles" Target="styles.xml"/><Relationship Id="rIdFooter" Type="${R}/footer" Target="footer1.xml"/>${logo ? `<Relationship Id="rIdLogo" Type="${R}/image" Target="media/logo.png"/>` : ""}</Relationships>` },
+    { name: "word/document.xml", data: doc }, { name: "word/styles.xml", data: styles }, { name: "word/footer1.xml", data: footer }
+  ];
+  if (logo) files.push({ name: "word/media/logo.png", data: logo });
+  return zipStore(files, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+}
+function sumulaArena() {
+  const s = cfg(), W = [700, 2500, 2700, 1300, 1450, 1450, 1450, 1250, 2190]; // A4 paisagem, soma 14990
+  const H = (txt, i, size = 18) => dCell(txt, W[i], { bold: true, fill: DX.light, align: i === 1 || i === 2 ? undefined : "center", size });
+  const head = dRow([H("Ordem", 0), H("Equipe", 1), H("Escola", 2), H("Cor (nº)", 3), H(["Balões de", "outra cor", `(+${s.freeOther} cada)`], 4), H(["Balões da", "própria cor", `(−${s.freeOwn} cada)`], 5), H(["Saídas da", "arena", `(−${s.freeExit} cada)`], 6), H("PONTOS", 7), H(["Falha técnica / repetição", "(motivo) · rubrica do juiz"], 8, 16)]);
+  const list = sortedTeams(), blanks = list.length ? 2 : 8;
+  const body = [...list.map((t, i) => {
+    const c = drawOf(t.id);
+    return dRow([dCell(String(i + 1), W[0], { align: "center" }), dCell([dPara(dRun(t.name, { bold: true }), { after: 0 }), dPara(dRun(teamNo(t), { size: 16, color: DX.gray }), { after: 0 })], W[1]), dCell(t.school || "", W[2], { size: 16, color: DX.gray }), dCell(c ? `${c.number} · ${c.name}` : "", W[3], { align: "center", size: 18 }), ...[4, 5, 6, 7, 8].map(k => dCell("", W[k]))], 620);
+  }), ...Array.from({ length: blanks }, () => dRow(W.map(w => dCell("", w)), 620))];
+  dPicId = 0;
+  const pages = Array.from({ length: s.freeRounds }, (_, i) => dHeader(`SÚMULA — ARENA LIVRE · RODADA ${i + 1}`, `Arena 2,70 × 2,70 m · uma equipe por vez · tempo máximo de ${s.freeSeconds} s por tentativa · a cor da equipe vale para todas as rodadas`) +
+    dPara([...dLine("Data:", 1800), dRun("     "), ...dLine("Juiz:", 3800), dRun("     "), ...dLine("Operador do sistema:", 3800)], { after: 140 }) +
+    dTable(W, [head, ...body]) +
+    dPara([dRun("Pontos da tentativa = ", { bold: true, size: 18 }), dRun(`(balões de outra cor × ${s.freeOther}) − (balões da própria cor × ${s.freeOwn}) − (saídas da arena × ${s.freeExit}). `, { size: 18 }), dRun("Marque os balões com tracinhos (|||) e some ao final. A equipe com falha técnica pode repetir a tentativa, registrando o motivo.", { size: 18, color: DX.gray })], { before: 120, after: 160 }) +
+    dPara([...dLine("Assinatura do juiz:", 4200), dRun("          "), ...dLine("Comissão Organizadora:", 4200)], { before: 200, after: 0 }));
+  return buildDocx(pages.join(dPageBreak()), true, "RoboSapiens 2026 · Robô Estoura Balão · Súmula da Arena Livre — registrar também no sistema");
+}
+function sumulaCup() {
+  const s = cfg(), W = [3690, 3000, 3000]; // A4 retrato, soma 9690
+  const ph = { prelim: "Fase preliminar", semi: "Semifinal", final: "Final" };
+  const pages = [], p = prelims();
+  if (p.length) p.forEach(m => pages.push({ phase: ph.prelim, label: `Confronto ${m.order} de ${p.length}`, a: m.a, b: m.b }));
+  else {
+    // fase preliminar ainda não gerada: páginas em branco na quantidade que a configuração atual vai gerar
+    const n = teams().length, total = n >= 2 ? Math.round(n * gamesPerTeam(n) / 2) : 21;
+    for (let i = 1; i <= total; i++) pages.push({ phase: ph.prelim, label: `Confronto ${i} de ${total}` });
+  }
+  const [s1, s2] = semis(), f = finalMatch();
+  pages.push({ phase: ph.semi, label: "Semifinal 1 · 1º colocado × 4º colocado", a: s1?.a, b: s1?.b });
+  pages.push({ phase: ph.semi, label: "Semifinal 2 · 2º colocado × 3º colocado", a: s2?.a, b: s2?.b });
+  pages.push({ phase: ph.final, label: "Final · vencedor SF1 × vencedor SF2", a: f?.a, b: f?.b });
+  pages.push({ phase: "", label: "Confronto nº ____ (reserva / repetição)" });
+  const teamHdr = (side, id) => {
+    const t = findTeam(id);
+    return [dPara(dRun(`EQUIPE ${side}`, { bold: true, size: 18, color: DX.gray }), { after: 20, align: "center" }),
+      t ? dPara(dRun(t.name, { bold: true, size: 22 }), { after: 20, align: "center" }) : dPara(dRun("_".repeat(26), { color: DX.gray }), { after: 20, align: "center" }),
+      dPara(dRun(t ? `${teamNo(t)} · ${t.school || "Escola não informada"}` : "Escola: ____________________", { size: 16, color: DX.gray }), { after: 0, align: "center" })];
+  };
+  const qty = (lbl, mult) => dRow([dCell([dPara(dRun(lbl, { size: 19 }), { after: 0 }), dPara(dRun(`quantidade × ${mult}`, { size: 16, color: DX.gray }), { after: 0 })], W[0]),
+    ...[1, 2].map(k => dCell(dPara(dRun("qtd ____   =   ______ pts", { size: 19 }), { after: 0, align: "center" }), W[k]))], 560);
+  const sub = lbl => dRow([dCell(lbl, W[0], { bold: true, fill: DX.light }), dCell("", W[1], { fill: DX.light }), dCell("", W[2], { fill: DX.light })], 480);
+  const sec = lbl => dRow([dCell(lbl, W[0] + W[1] + W[2], { bold: true, color: DX.green, span: 3 })], 360);
+  const sign = who => dCell([dPara(dRun(" "), { after: 300 }), dPara(dRun(who, { size: 18, color: DX.gray }), { align: "center", after: 0 })], 3230);
+  dPicId = 0;
+  const body = pages.map(pg => dHeader("SÚMULA — CONFRONTO DIRETO", `Arena 1,20 × 1,20 m · ${rulesCupTime()} · +${s.cupBalloon} por balão adversário estourado · +${s.cupExit} quando o adversário sai da arena`) +
+    dPara([dRun("Fase: ", { bold: true }), ...(pg.phase ? [dRun(pg.phase, { bold: true, color: DX.green })] : [dBox("Preliminar"), dBox("Semifinal"), dBox("Final")]), dRun("      "), dRun(pg.label, { bold: true })], { after: 100 }) +
+    dPara([...dLine("Data:", 1800), dRun("     "), ...dLine("Horário:", 1400), dRun("     "), ...dLine("Juiz:", 3600)], { after: 160 }) +
+    dTable(W, [
+      dRow([dCell("", W[0], { fill: DX.light }), dCell(teamHdr("A", pg.a), W[1], { fill: DX.light }), dCell(teamHdr("B", pg.b), W[2], { fill: DX.light })], 900),
+      sec(`ROUND 1 (até ${durTxt(s.cupR1)})`), qty("Balões do adversário estourados", s.cupBalloon), qty("Adversário saiu da arena", s.cupExit), sub("Subtotal Round 1"),
+      sec(`ROUND 2 (até ${durTxt(s.cupR2)})`), qty("Balões do adversário estourados", s.cupBalloon), qty("Adversário saiu da arena", s.cupExit), sub("Subtotal Round 2"),
+      dRow([dCell("TOTAL", W[0], { bold: true, size: 24, fill: DX.total }), dCell("", W[1], { fill: DX.total }), dCell("", W[2], { fill: DX.total })], 640)
+    ]) +
+    dPara([dRun("Resultado:  ", { bold: true }), dBox("Vitória da Equipe A"), dBox("Vitória da Equipe B"), dBox("Empate (só na fase preliminar)")], { before: 180, after: 80 }) +
+    dPara([dRun("Empate em semifinal/final — vencedor por decisão da Comissão: ", { size: 19 }), dRun("_".repeat(34), { color: DX.gray })], { after: 140 }) +
+    dPara(dRun("Ocorrências / falha técnica (round repetido? motivo):", { bold: true, size: 19 }), { after: 40 }) +
+    dPara(dRun("_".repeat(84), { color: DX.gray }), { after: 40 }) + dPara(dRun("_".repeat(84), { color: DX.gray }), { after: 200 }) +
+    dTable([3230, 3230, 3230], [dRow([sign("Juiz"), sign("Representante Equipe A"), sign("Representante Equipe B")])]));
+  return buildDocx(body.join(dPageBreak()), false, "RoboSapiens 2026 · Robô Estoura Balão · Súmula do Confronto Direto — registrar também no sistema");
+}
+function exportSumula(kind) {
+  try {
+    if (kind === "arena") downloadBlob(sumulaArena(), `Sumula-Arena-Livre-${stamp()}.docx`);
+    else downloadBlob(sumulaCup(), `Sumula-Confronto-Direto-${stamp()}.docx`);
+    toast("Súmula gerada (Word)");
+  } catch (e) { console.error(e); warn("Não foi possível gerar a súmula"); }
+}
+
 /* ============================ CONFIGURAÇÕES ============================ */
 function config() {
   const s = state.settings;
@@ -1656,6 +1767,8 @@ function config() {
     `<div class="grid g2">
       <div class="card"><h2>📊 Planilha de resultados</h2><p class="muted small">Arquivo Excel (.xlsx) com todas as etapas: equipes, Arena Livre (classificação, tentativas e cada marcação), Confronto Direto (jogos, classificação e cada marcação) e Classificação Geral.</p><div class="actions mt-s"><button class="btn primary" onclick="exportXlsx()">📊 Exportar planilha (Excel)</button></div></div>
       <div class="card"><h2>💾 Backup</h2><div class="actions"><button class="btn primary" onclick="exportData()">⬇ Exportar JSON</button><label class="btn file">⬆ Importar JSON<input id="importFile" type="file" accept=".json,application/json" hidden></label></div><p class="muted small mt-s">Os dados ficam salvos neste navegador. Exporte um backup ao final de cada etapa.</p></div>
+      <div class="card span-all"><h2>📝 Súmulas para imprimir (Word)</h2><p class="muted small">Arquivo .docx com uma página por rodada (Arena Livre) ou por confronto (Confronto Direto), já com as equipes, as cores sorteadas, os confrontos gerados, os tempos e as pontuações configurados agora. Se algo mudar, gere de novo.</p>
+        <div class="actions mt-s"><button class="btn primary" onclick="exportSumula('arena')">🎈 Súmula da Arena Livre (${s.freeRounds} rodada${s.freeRounds > 1 ? "s" : ""})</button><button class="btn primary" onclick="exportSumula('cup')">⚔️ Súmula do Confronto Direto</button></div></div>
       <div class="card"><h2>🎈 Arena Livre</h2><div class="form-grid">
         <div><label>Rodadas por equipe</label><select onchange="setSetting('freeRounds',this.value)">${[1, 2, 3, 4, 5].map(n => `<option ${s.freeRounds === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div><label>Tempo por tentativa (s)</label><input type="number" min="5" max="600" value="${s.freeSeconds}" onchange="setSetting('freeSeconds',this.value)"></div>
