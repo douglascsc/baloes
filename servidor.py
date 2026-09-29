@@ -98,6 +98,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def same_origin(self):
+        """Bloqueia gravacoes feitas por outros sites abertos no navegador (CSRF):
+        a origem, se enviada, precisa ser este proprio servidor."""
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        port = self.server.server_address[1]
+        return origin in (f"http://localhost:{port}", f"http://127.0.0.1:{port}", f"http://[::1]:{port}")
+
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == "/api/info":
@@ -111,15 +120,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if since is None or str(store["rev"]) != since:
                     out["data"] = store["data"]
             return self.send_json(out)
-        if url.path.startswith("/dados-competicao"):
+        # nao expoe o backup, o proprio servidor nem pastas ocultas (.git etc.)
+        parts = [p for p in url.path.split("/") if p]
+        if url.path.startswith("/dados-competicao") or any(p.startswith(".") or p == "__pycache__" for p in parts) \
+                or url.path.lower().endswith((".py", ".bat", ".tmp", ".corrompido")):
             return self.send_error(404)
         return super().do_GET()
 
     def do_POST(self):
         if urlparse(self.path).path != "/api/estado":
             return self.send_error(404)
-        if not self.is_local():
+        if not self.is_local() or not self.same_origin():
             return self.send_json({"erro": "Somente o PC que registra pode alterar os dados."}, 403)
+        if not self.headers.get("Content-Type", "").startswith("application/json"):
+            return self.send_json({"erro": "formato invalido"}, 415)
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0 or n > MAX_BODY:

@@ -71,10 +71,6 @@ button{cursor:pointer}
 /* ---------- Avisos ---------- */
 .notice{padding:12px 14px;border-left:4px solid var(--green);background:#f0f8f2;color:#34513f;border-radius:9px;font-size:13px;line-height:1.45}
 .notice.warn{border-left-color:var(--yellow);background:var(--yellow-l);color:#6e5520}.notice.cup{border-left-color:var(--cup);background:var(--cup-l);color:#23406f}
-.mode-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 16px;border-radius:12px;margin-bottom:16px;font-size:13px}
-.mode-banner b{letter-spacing:1.5px;font-size:12px}
-.mode-banner.arena{background:var(--arena-l);color:#8a4410;border:1px solid #f7d2b2}.mode-banner.cup{background:var(--cup-l);color:#1d427f;border:1px solid #c8d9f6}
-.mode-banner .pill{margin-left:auto}
 
 /* ---------- Início ---------- */
 .now-item{display:flex;flex-direction:column;align-items:flex-start;gap:8px}.now-item b{font-size:22px}
@@ -133,7 +129,6 @@ label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-wei
 .stage-school{color:var(--muted);font-size:15px;margin-top:3px}
 .stage-color{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 4px;padding:10px 12px;background:var(--soft);border-radius:12px}
 .stage-color>.muted{flex-basis:100%;font-weight:800;letter-spacing:.6px;font-size:12px}
-.color-pick{display:flex;gap:6px;align-items:center;margin-left:auto}.color-pick select{min-height:36px;padding:6px 10px;width:auto}
 .stage-mid{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;margin:8px 0}
 .stage-score{text-align:center;background:var(--soft);border:1px solid var(--line);border-radius:16px;padding:10px 22px;min-width:150px}
 .stage-score span{display:block;font-size:12px;font-weight:900;letter-spacing:1.5px;color:var(--muted)}.stage-score b{font-size:58px;font-weight:950;font-variant-numeric:tabular-nums}
@@ -280,7 +275,6 @@ body.telao-window #app,body.telao-full #app{display:none}
   .stage-team{font-size:26px}.timer{font-size:62px}.stage-score b{font-size:44px}
   .stage-mid{grid-template-columns:1fr}.stage-score{min-width:0}
   .score-btns{grid-template-columns:1fr 1fr 1fr;gap:6px}.btn.score{min-height:76px;padding:6px 4px}.btn.score b{font-size:22px}.btn.score span{font-size:12px}
-  .color-pick{margin-left:0;width:100%}.color-pick select{flex:1}
   .versus{grid-template-columns:1fr;gap:10px}.versus .vs{font-size:20px}
   .versus.live{grid-template-columns:1fr 1fr;gap:8px}.versus.live .vs{display:none}
   .fighter{padding:10px 8px}.fighter .pts{font-size:48px}.fighter .tcell b{font-size:17px}
@@ -292,7 +286,6 @@ body.telao-window #app,body.telao-full #app{display:none}
   .hide-sm{display:none}
   .table th,.table td{padding:9px 5px}
   .m-side{min-width:0}
-  .mode-banner .pill{margin-left:0}
   .btn.huge{width:100%;font-size:17px}
   .champion-banner h2{font-size:22px}
   #toast{top:70px}
@@ -301,9 +294,7 @@ body.telao-window #app,body.telao-full #app{display:none}
 /* Sorteio de cores na fila da Arena Livre */
 .q-color{width:26px;height:26px;border-radius:50%;background:var(--c);color:var(--t);display:grid;place-items:center;font-size:12px;font-weight:900;flex-shrink:0;border:2px solid rgba(0,0,0,.12)}
 .q-color.none{background:#f1f4f2;color:#a2aca6;border-style:dashed}
-.q-draw{padding:8px 12px;border-top:1px solid var(--line2);display:flex;justify-content:flex-end}
 .stage-color.center-flex{justify-content:center;max-width:520px;margin-left:auto;margin-right:auto}
-.stage-color.center-flex .color-pick{margin-left:0}
 .mini-select{width:auto;min-height:32px;padding:4px 8px;font-size:12px;max-width:140px}
 .tv-colors{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2cqw;width:min(90cqw,100%);margin-top:1cqw}
 .tv-ci{display:flex;align-items:center;gap:1cqw;background:#f5f8f6;border-radius:1.2cqw;padding:.8cqw 1.2cqw;text-align:left;border:.2cqw solid transparent}

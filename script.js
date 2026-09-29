@@ -115,11 +115,13 @@ function fresh(teamsList) {
   };
 }
 const str = v => (v === undefined || v === null) ? "" : String(v).trim();
+// IDs entram em atributos onclick: aceita só letras, números, _ e - (mesma troca em todas as referências)
+const sid = v => str(v).replace(/[^\w-]/g, "_");
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 
 function normTeam(t, i) {
   return {
-    id: str(t.id) || uid(), number: Number.isFinite(Number(t.number)) && Number(t.number) >= 1 && t.number !== null && t.number !== "" ? Math.round(Number(t.number)) : null,
+    id: sid(t.id) || uid(), number: Number.isFinite(Number(t.number)) && Number(t.number) >= 1 && t.number !== null && t.number !== "" ? Math.round(Number(t.number)) : null,
     name: str(t.name) || `Equipe ${String(i + 1).padStart(2, "0")}`, school: str(t.school),
     robot: str(t.robot), professor: str(t.professor), members: str(t.members)
   };
@@ -131,7 +133,7 @@ function normTimer(t, dur) {
 }
 function normEvents(list) {
   return (Array.isArray(list) ? list : []).filter(e => e && Number.isFinite(Number(e.pts)))
-    .map(e => ({ id: str(e.id) || uid(), pts: Number(e.pts), label: str(e.label) || "Pontuação", t: str(e.t) || "00:00", side: e.side === "b" ? "b" : e.side === "a" ? "a" : undefined, seq: num(e.seq, 0) }));
+    .map(e => ({ id: sid(e.id) || uid(), pts: Number(e.pts), label: str(e.label) || "Pontuação", t: str(e.t) || "00:00", side: e.side === "b" ? "b" : e.side === "a" ? "a" : undefined, seq: num(e.seq, 0) }));
 }
 function normalize(raw) {
   const base = fresh([]);
@@ -143,7 +145,7 @@ function normalize(raw) {
   s.dataV = 1;
   s.colors = (Array.isArray(s.colors) && s.colors.length ? s.colors : defaultColors())
     .filter(c => c && typeof c === "object")
-    .map((c, i) => ({ id: str(c.id) || uid(), number: Math.max(1, Math.round(num(c.number, i + 1))), name: str(c.name) || `Cor ${i + 1}`, hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" }));
+    .map((c, i) => ({ id: sid(c.id) || uid(), number: Math.max(1, Math.round(num(c.number, i + 1))), name: str(c.name) || `Cor ${i + 1}`, hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" }));
   const st = { ...defaultSettings(), ...(s.settings || {}) };
   st.freeRounds = Math.min(5, Math.max(1, Math.round(num(st.freeRounds, 4))));
   st.freeSeconds = Math.min(600, Math.max(5, Math.round(num(st.freeSeconds, 30))));
@@ -170,7 +172,6 @@ function normalize(raw) {
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
-  // Quem ainda usa a ordem padrão antiga (não personalizada) passa para a nova
   // Quem ainda usa uma ordem padrão anterior (não personalizada) passa para a atual
   const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0"];
   if (!(s.settings && s.settings.tbV === 4)) { if (OLD_TBS.includes(st.tiebreak.map(x => x.key + (x.on ? 1 : 0)).join())) st.tiebreak = defaultSettings().tiebreak; st.tbV = 4; }
@@ -178,33 +179,33 @@ function normalize(raw) {
   const ids = new Set(s.teams.map(t => t.id));
   const f = s.free && typeof s.free === "object" ? s.free : {};
   s.free = {
-    attempts: (Array.isArray(f.attempts) ? f.attempts : []).filter(a => a && ids.has(a.teamId)).map(a => ({
-      id: str(a.id) || uid(), teamId: a.teamId, round: Math.max(1, Math.round(num(a.round, 1))),
+    attempts: (Array.isArray(f.attempts) ? f.attempts : []).filter(a => a && ids.has(sid(a.teamId))).map(a => ({
+      id: sid(a.id) || uid(), teamId: sid(a.teamId), round: Math.max(1, Math.round(num(a.round, 1))),
       color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at), repeats: normRepeats(a.repeats)
     })),
     current: null, draws: {}
   };
   Object.entries(f.draws && typeof f.draws === "object" ? f.draws : {}).forEach(([tid, c]) => {
-    const cs = normColorSnap(c); if (ids.has(tid) && cs) s.free.draws[tid] = cs;
+    const cs = normColorSnap(c); if (ids.has(sid(tid)) && cs) s.free.draws[sid(tid)] = cs;
   });
-  if (f.current && ids.has(f.current.teamId)) {
-    s.free.current = { id: str(f.current.id) || uid(), teamId: f.current.teamId, round: Math.max(1, Math.round(num(f.current.round, 1))), color: normColorSnap(f.current.color), events: normEvents(f.current.events), repeats: normRepeats(f.current.repeats), timer: normTimer(f.current.timer, st.freeSeconds) };
+  if (f.current && ids.has(sid(f.current.teamId))) {
+    s.free.current = { id: sid(f.current.id) || uid(), teamId: sid(f.current.teamId), round: Math.max(1, Math.round(num(f.current.round, 1))), color: normColorSnap(f.current.color), events: normEvents(f.current.events), repeats: normRepeats(f.current.repeats), timer: normTimer(f.current.timer, st.freeSeconds) };
   }
   const c = s.cup && typeof s.cup === "object" ? s.cup : {};
   s.cup = {
     matches: (Array.isArray(c.matches) ? c.matches : []).filter(m => m && ["prelim", "semi", "final"].includes(m.stage)).map(m => ({
-      id: str(m.id) || uid(), stage: m.stage, order: Math.round(num(m.order, 1)),
-      a: ids.has(m.a) ? m.a : null, b: ids.has(m.b) ? m.b : null,
+      id: sid(m.id) || uid(), stage: m.stage, order: Math.round(num(m.order, 1)),
+      a: ids.has(sid(m.a)) ? sid(m.a) : null, b: ids.has(sid(m.b)) ? sid(m.b) : null,
       status: ["pending", "live", "done"].includes(m.status) ? m.status : "pending",
       phase: ["r1", "break", "r2", "review"].includes(m.phase) ? m.phase : "r1",
       timer: normTimer(m.timer, ROUND1_SECONDS),
       rounds: { 1: { events: normEvents(m.rounds?.[1]?.events) }, 2: { events: normEvents(m.rounds?.[2]?.events) } },
-      winner: m.winner === "draw" || ids.has(m.winner) ? m.winner : null,
-      pick: ids.has(m.pick) ? m.pick : null, byDecision: !!m.byDecision,
+      winner: m.winner === "draw" ? "draw" : ids.has(sid(m.winner)) ? sid(m.winner) : null,
+      pick: ids.has(sid(m.pick)) ? sid(m.pick) : null, byDecision: !!m.byDecision,
       _backup: typeof m._backup === "string" ? m._backup : undefined, repeats: normRepeats(m.repeats)
     })).filter(m => m.a && m.b),
-    liveId: str(c.liveId) || null,
-    manualOrder: (Array.isArray(c.manualOrder) ? c.manualOrder : []).filter(id => ids.has(id))
+    liveId: sid(c.liveId) || null,
+    manualOrder: (Array.isArray(c.manualOrder) ? c.manualOrder : []).map(sid).filter(id => ids.has(id))
   };
   if (!s.cup.matches.some(m => m.id === s.cup.liveId && m.status === "live")) {
     s.cup.liveId = null;
@@ -212,7 +213,7 @@ function normalize(raw) {
   }
   const hhmm = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(str(v)) ? str(v) : "";
   s.schedule = (Array.isArray(s.schedule) ? s.schedule : defaultSchedule()).filter(x => x && typeof x === "object")
-    .map(x => ({ id: str(x.id) || uid(), start: hhmm(x.start), end: hhmm(x.end), title: str(x.title) || "Atividade", detail: str(x.detail) }))
+    .map(x => ({ id: sid(x.id) || uid(), start: hhmm(x.start), end: hhmm(x.end), title: str(x.title) || "Atividade", detail: str(x.detail) }))
     .sort((a, b) => (a.start || "99").localeCompare(b.start || "99") || (a.end || "").localeCompare(b.end || ""));
   // Atualização única do cronograma padrão (Etapa 2 começa às 13h45); atividades editadas não mudam
   if (!(num(s.schedV, 0) >= 2)) {
@@ -231,7 +232,7 @@ function normalize(raw) {
 function normRepeats(list) { return (Array.isArray(list) ? list : []).filter(x => x && typeof x === "object").map(x => ({ at: str(x.at), reason: str(x.reason) || "não informado", round: Math.round(num(x.round, 0)) || undefined })); }
 function normColorSnap(c) {
   if (!c || typeof c !== "object") return null;
-  return { id: str(c.id), number: Math.round(num(c.number, 0)), name: str(c.name) || "Cor", hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" };
+  return { id: sid(c.id), number: Math.round(num(c.number, 0)), name: str(c.name) || "Cor", hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" };
 }
 function load() {
   try {
@@ -250,7 +251,7 @@ function load() {
 let state = load();
 function save() {
   if (TELAO_WINDOW) return;
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { toast("Não foi possível salvar no navegador"); }
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { warn("Não foi possível salvar no navegador (armazenamento cheio ou bloqueado). Exporte um backup em Configurações."); }
   if (NET.on && NET.local) { clearTimeout(NET.timer); NET.timer = setTimeout(pushState, 120); }
 }
 
@@ -306,8 +307,8 @@ function countdownBeep(t, kind = "free", phase = "") {
   const L = left(t);
   if (s[kind + "BeepMid"]) String(s[kind + "BeepMidAt"]).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
   if (s[kind + "BeepEnd"]) marks.push([0, "end"]);
-  marks.forEach(([th, kind]) => {
-    if (L <= th && L > th - 1.5 && t.duration > th + 1) { const k = `${t.endsAt}:${th}`; if (!beeped.has(k)) { beeped.add(k); beep(kind); } }
+  marks.forEach(([th, sound]) => {
+    if (L <= th && L > th - 1.5 && t.duration > th + 1) { const k = `${t.endsAt}:${th}`; if (!beeped.has(k)) { beeped.add(k); beep(sound); } }
   });
 }
 function textOn(hex) {
@@ -404,7 +405,7 @@ function inicio() {
       ${stat("Confronto Direto", cs.total ? `${cs.done}/${cs.total}` : "—", "⚔️", cs.total ? cs.stageText : "fase preliminar não gerada")}
     </div>
     <div class="grid g2 mt">
-      <div class="card"><h2>Agora</h2>${now}${(() => { const a = currentActivity(), nx = nextActivity(); return a || nx ? `<div class="sch-now mt-s" onclick="nav('crono')" role="button" tabindex="0">🗓️ ${a ? `<b>${hFmt(a.start)} às ${hFmt(a.end)} · ${esc(a.title)}</b>` : "Nenhuma atividade agora"}${nx ? `<span class="muted small">A seguir: ${hFmt(nx.start)} · ${esc(nx.title)}</span>` : ""}</div>` : ""; })()}</div>
+      <div class="card"><h2>Agora</h2>${now}${(() => { const a = currentActivity(), nx = nextActivity(); return a || nx ? `<div class="sch-now mt-s" onclick="nav('crono')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('crono')}" role="button" tabindex="0">🗓️ ${a ? `<b>${hFmt(a.start)} às ${hFmt(a.end)} · ${esc(a.title)}</b>` : "Nenhuma atividade agora"}${nx ? `<span class="muted small">A seguir: ${hFmt(nx.start)} · ${esc(nx.title)}</span>` : ""}</div>` : ""; })()}</div>
       <div class="card"><h2>Próximos</h2>
         <div class="next-list">
           <div><span class="tag arena">ARENA LIVRE</span> ${nf ? `<b>${esc(teamName(nf.teamId))}</b> · Rodada ${nf.round}` : `<span class="muted">${fs.total ? "Concluída ✓" : "Cadastre equipes"}</span>`}</div>
@@ -539,13 +540,14 @@ function deleteTeam(id) {
   logEv(`Equipe excluída: ${t.name}`);
   state.teams = state.teams.filter(x => x.id !== id);
   state.free.attempts = state.free.attempts.filter(a => a.teamId !== id);
+  delete state.free.draws[id];
   state.cup.manualOrder = state.cup.manualOrder.filter(x => x !== id);
   save(); toast("Equipe excluída"); render();
 }
 function drawNumbers() {
   if (!teams().length) return warn("Cadastre as equipes primeiro.");
-  const warn = state.cup.matches.length ? "\n\nOs confrontos já gerados NÃO mudam; para usar a nova numeração, gere a fase preliminar novamente." : "";
-  if (!confirm("Sortear a numeração de todas as equipes?" + warn)) return;
+  const note = state.cup.matches.length ? "\n\nOs confrontos já gerados NÃO mudam; para usar a nova numeração, gere a fase preliminar novamente." : "";
+  if (!confirm("Sortear a numeração de todas as equipes?" + note)) return;
   const nums = shuffle(teams().map((_, i) => i + 1));
   teams().forEach((t, i) => { t.number = nums[i]; });
   logEv(`Numeração sorteada: ${sortedTeams().map(t => `${pad2(t.number)} ${t.name}`).join(", ")}`);
@@ -581,18 +583,26 @@ function colorForm(id) {
     const F = e.target; fieldErr(F);
     if (!data.name) return fieldErr(F, "name", "Informe o nome da cor.");
     if (state.colors.some(x => x !== c && x.number === data.number)) return fieldErr(F, "number", `O número ${data.number} já está em uso (${state.colors.find(x => x !== c && x.number === data.number).name}).`);
-    if (c) Object.assign(c, data); else state.colors.push({ id: uid(), ...data });
+    logEv(c ? `Cor editada: ${c.number} ${c.name} → ${data.number} ${data.name}` : `Cor incluída: ${data.number} ${data.name}`);
+    if (c) {
+      Object.assign(c, data);
+      // equipes com esta cor sorteada passam a mostrar o nome/número/tom novos (tentativas já registradas não mudam)
+      Object.keys(state.free.draws).forEach(tid => { if (state.free.draws[tid]?.id === c.id) state.free.draws[tid] = snap(c); });
+      if (state.free.current?.color?.id === c.id && state.free.current.timer.status === "idle") state.free.current.color = snap(c);
+    } else state.colors.push({ id: uid(), ...data });
     save(); closeModal(); toast(c ? "Cor atualizada" : "Cor adicionada"); render();
   };
 }
 function deleteColor(id) {
   const c = state.colors.find(x => x.id === id); if (!c) return;
-  if (!confirm(`Excluir a cor ${c.number} (${c.name})?\nResultados já registrados não mudam.`)) return;
+  const inUse = teams().filter(t => drawOf(t.id)?.id === id).map(t => t.name);
+  if (!confirm(`Excluir a cor ${c.number} (${c.name})?\nResultados já registrados não mudam.${inUse.length ? `\n\nEsta cor está sorteada para: ${inUse.join(", ")}. Elas continuam com ela até um novo sorteio ou troca manual.` : ""}`)) return;
+  logEv(`Cor excluída: ${c.number} ${c.name}`);
   state.colors = state.colors.filter(x => x.id !== id); save(); toast("Cor excluída"); render();
 }
 function restoreColors() {
   if (!confirm("Substituir a lista atual pelas 4 cores padrão (Vermelho, Azul, Verde, Amarelo)?")) return;
-  state.colors = defaultColors(); save(); toast("Cores restauradas"); render();
+  state.colors = defaultColors(); logEv("Cores restauradas para o padrão"); save(); toast("Cores restauradas"); render();
 }
 
 /* ============================ ARENA LIVRE: LÓGICA ============================ */
@@ -623,7 +633,7 @@ const snap = c => c ? { id: c.id, number: c.number, name: c.name, hex: c.hex } :
 function drawOf(teamId) { return state.free.draws?.[teamId] || null; }
 function allDrawn() { return teams().length > 0 && teams().every(t => drawOf(t.id)); }
 function drawColors() {
-  if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
+  if (!state.colors.length) { warn("Cadastre as cores antes."); return nav("cores"); }
   if (!teams().length) return warn("Cadastre as equipes antes.");
   if (state.free.current) return warn("Há uma equipe na arena. Registre ou cancele a tentativa antes.");
   const started = state.free.attempts.length > 0, has = teams().some(t => drawOf(t.id));
@@ -637,6 +647,7 @@ function drawColors() {
   save(); toast(teams().length > state.colors.length ? `Cores sorteadas (${state.colors.length} cores para ${teams().length} equipes: algumas se repetem)` : "Cores sorteadas — valem para todas as rodadas"); render();
 }
 function drawMissing() {
+  if (!state.colors.length) { warn("Cadastre as cores antes."); return nav("cores"); }
   const used = new Set(Object.values(state.free.draws).map(c => c.id));
   const free = shuffle(state.colors.filter(c => !used.has(c.id)));
   sortedTeams().filter(t => !drawOf(t.id)).forEach((t, i) => { state.free.draws[t.id] = snap(free[i] || state.colors[Math.floor(Math.random() * state.colors.length)]); });
@@ -662,7 +673,7 @@ function teamColorsCard(inArena = false) {
 function callTeam(teamId, round) {
   if (state.free.current) return warn("Já existe uma equipe na arena. Registre ou cancele a tentativa atual.");
   if (liveMatch()) return warn("Há um Confronto Direto em andamento. Finalize-o antes.");
-  if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
+  if (!state.colors.length) { warn("Cadastre as cores antes."); return nav("cores"); }
   if (attemptOf(teamId, round)) return warn("Essa tentativa já foi registrada.");
   const color = drawOf(teamId);
   if (!color) return warn("Sorteie as cores das equipes antes de chamar para a arena.");
@@ -783,7 +794,7 @@ function freeIdle() {
   if (!c) return `<div class="card stage center">
     <div class="eyebrow">PASSO 1 DE 2</div>
     <h2>Sorteio das cores</h2>
-    <p class="muted">Antes de chamar as equipes, sorteie a cor de cada equipe. A cor vale para todas as rodadas.<br>Os balões da cor sorteada são da própria equipe (−50 se estourar).</p>
+    <p class="muted">Antes de chamar as equipes, sorteie a cor de cada equipe. A cor vale para todas as rodadas.<br>Os balões da cor sorteada são da própria equipe (−${cfg().freeOwn} se estourar).</p>
     ${teams().some(x => drawOf(x.id)) ? `<button class="btn primary huge mt" onclick="drawMissing()">🎲 Sortear cor para quem falta</button>` : `<button class="btn primary huge mt" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
   </div>`;
   return `${choice}<div class="card stage center">
@@ -848,7 +859,7 @@ function freeRankingCard() {
   const hist = [...state.free.attempts].sort((a, b) => str(b.at).localeCompare(str(a.at))).map(a => `<div class="log-item"><span><b>${esc(teamName(a.teamId, "Equipe removida"))}</b> · Rodada ${a.round} · ${colorChip(a.color)}</span><b>${hide(signed(attemptTotal(a)))}</b><button class="btn tiny danger" onclick="freeVoid('${esc(a.id)}')">Anular</button></div>`).join("");
   return `<div class="card mt"><div class="card-head"><h2>🏆 Classificação da Arena Livre</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
-    <div class="table-wrap"><table class="table" aria-label="Classificação da Arena Livre"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th>${Array.from({ length: R }, (_, i) => `<th class="num">R${i + 1}</th>`).join("")}<th class="num">${state.settings.freeRankMode === "melhor" ? "Melhor" : "Total"}</th></tr></thead><tbody>${rows || `<tr><td colspan="${R + 3}">Nenhuma equipe cadastrada.</td></tr>`}</tbody></table></div>
+    <div class="table-wrap"><table class="table" aria-label="Classificação da Arena Livre"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th>${Array.from({ length: R }, (_, i) => `<th class="num">R${i + 1}</th>`).join("")}<th class="num">${state.settings.freeRankMode === "melhor" ? "Melhor" : "Total"}</th></tr></thead><tbody>${rows || `<tr><td colspan="${R + (reveal ? 3 : 2)}">Nenhuma equipe cadastrada.</td></tr>`}</tbody></table></div>
     <details class="mt-s"><summary class="muted">Histórico de tentativas (${state.free.attempts.length})</summary><div class="log">${hist || `<div class="muted small">Nenhuma tentativa registrada.</div>`}</div></details>
   </div>`;
 }
@@ -945,11 +956,11 @@ function generatePrelim() {
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
   const k = gamesPerTeam(list.length);
-  if (cfg().cupGames && k !== cfg().cupGames) warn(`Com ${list.length} equipes não é possível cada uma jogar ${cfg().cupGames} vezes sem repetir adversário. Gerando com ${k} jogos por equipe.`);
+  const reduced = cfg().cupGames && k !== cfg().cupGames ? ` Com ${list.length} equipes não é possível cada uma jogar ${cfg().cupGames} vezes sem repetir adversário: foram usados ${k} jogos por equipe.` : "";
   const pairs = buildPrelimPairs(list.map(t => t.id), k);
   state.cup = { matches: pairs.map((p, i) => emptyMatch("prelim", i + 1, p[0], p[1])), liveId: null, manualOrder: [] };
   logEv(`Fase preliminar gerada: ${pairs.length} confrontos, ${k} por equipe (${pairs.map(p => `${teamName(p[0])} × ${teamName(p[1])}`).join("; ")})`);
-  save(); toast(`${pairs.length} confrontos gerados`); render();
+  save(); reduced ? warn(`${pairs.length} confrontos gerados.${reduced}`) : toast(`${pairs.length} confrontos gerados`); render();
 }
 
 /* ---- Classificação da fase preliminar ---- */
@@ -1034,7 +1045,7 @@ function checkProgress() {
   if (prelimDone() && !semis().length) {
     const rows = standings();
     if (rows.length < 4) return;
-    if (blockingTie(rows)) { toast("Empate não resolvido na classificação — defina a ordem para gerar as semifinais."); return; }
+    if (blockingTie(rows)) { warn("Empate não resolvido na classificação — defina a ordem para gerar as semifinais."); return; }
     const s = seeds();
     state.cup.matches.push(emptyMatch("semi", 1, s[0], s[3]), emptyMatch("semi", 2, s[1], s[2]));
     toast("Semifinais geradas: 1º × 4º e 2º × 3º");
@@ -1152,8 +1163,9 @@ function confirmResult() {
   logEv(`${matchLabel(m)} — resultado: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`}${beforeTxt}`);
   Object.assign(m, { status: "done", winner, byDecision, phase: "review", timer: newTimer(0) }); delete m._backup;
   state.cup.liveId = null; save();
-  checkProgress();
+  // o aviso de fase gerada (semifinais/final/empate) vem depois e fica visível
   toast(m.stage === "final" ? `🏆 ${teamName(winner)} é CAMPEÃO!` : "Resultado registrado");
+  checkProgress();
   render();
   if (m.stage === "prelim" && prelimDone() && !before) autoBackup("apos-fase-preliminar", "fase preliminar concluída");
   if (m.stage === "final") autoBackup("final", "competição encerrada");
@@ -1243,7 +1255,7 @@ function livePanel(m) {
     const draw = sa === sb;
     const pick = draw && m.stage !== "prelim" ? `<div class="notice warn">Empate em fase eliminatória. Selecione o vencedor conforme decisão da Comissão Organizadora:<div class="actions mt-s">${[m.a, m.b].map(id => `<button class="btn ${m.pick === id ? "primary" : ""}" onclick="pickWinner('${esc(id)}')">${m.pick === id ? "✓ " : ""}${esc(teamName(id))}</button>`).join("")}</div></div>` : "";
     ctrl = `<div class="review">
-      <div class="review-res">${draw ? (m.stage === "prelim" ? "EMPATE · 1 ponto para cada" : "EMPATE") : `Vencedor: <b>${esc(teamName(sa > sb ? m.a : m.b))}</b>`}</div>
+      <div class="review-res">${draw ? (m.stage === "prelim" ? `EMPATE · ${cfg().drawPts} ponto${cfg().drawPts === 1 ? "" : "s"} para cada` : "EMPATE") : `Vencedor: <b>${esc(teamName(sa > sb ? m.a : m.b))}</b>`}</div>
       ${pick}
       <div class="review-round muted small">Nova marcação (correção) entra no: <button class="btn tiny ${reviewRound === 1 ? "primary" : ""}" onclick="setReviewRound(1)">Round 1</button><button class="btn tiny ${reviewRound === 2 ? "primary" : ""}" onclick="setReviewRound(2)">Round 2</button></div>
       <button class="btn primary huge" onclick="confirmResult()">✓ Confirmar resultado</button></div>`;
@@ -1466,7 +1478,7 @@ function setDisplay(mode) { state.display.mode = mode; save(); render(); }
 function toggleTvReveal() { state.display.reveal = !state.display.reveal; save(); render(); }
 function openTelaoWindow() {
   const w = window.open(location.pathname + "#telao", "telao_estoura_baloes", "width=1280,height=720");
-  if (!w) toast("O navegador bloqueou a janela. Permita pop-ups ou use “Tela cheia aqui”.");
+  if (!w) warn("O navegador bloqueou a janela. Permita pop-ups ou use “Tela cheia aqui”.");
 }
 function fullTelao() {
   document.body.classList.add("telao-full");
@@ -1499,10 +1511,10 @@ function tvPops() {
   if (cur) cur.events.forEach(e => evs.push({ e, side: "c", color: cur.color?.hex }));
   const m = liveMatch();
   if (m) [1, 2].forEach(r => m.rounds[r].events.forEach(e => evs.push({ e, side: e.side, color: e.pts >= 0 ? "#2463c9" : "#d33434" })));
-  const fresh = evs.filter(x => !popSeen.has(x.e.id));
+  const novos = evs.filter(x => !popSeen.has(x.e.id));
   evs.forEach(x => popSeen.add(x.e.id));
   if (!popInit) { popInit = true; return; }
-  fresh.slice(-3).forEach(x => {
+  novos.slice(-3).forEach(x => {
     const d = document.createElement("div");
     d.className = `tv-pop ${x.side} ${x.e.pts < 0 ? "neg" : "pos"}`;
     d.style.setProperty("--c", x.color || "#159447");
@@ -1690,7 +1702,7 @@ function config() {
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
         ${prelims().length ? `<button class="btn danger" onclick="generatePrelim()">↻ Gerar novamente a fase preliminar (apaga confrontos e resultados)</button>` : ""}
         <button class="btn danger" onclick="resetCup()">Zerar Confronto Direto (apaga confrontos e resultados)</button>
-        <button class="btn danger" onclick="resetAll()">Resetar tudo (volta às 7 equipes cadastradas)</button></div></div>
+        <button class="btn danger" onclick="resetAll()">Resetar tudo (volta ao cadastro inicial das ${INITIAL_TEAMS.length} equipes)</button></div></div>
     </div>`;
   document.getElementById("importFile").onchange = importData;
 }
@@ -1708,7 +1720,8 @@ function toggleTb(i) { state.settings.tiebreak[i].on = !state.settings.tiebreak[
 function moveTb(i, d) { const a = state.settings.tiebreak, j = i + d; if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; save(); render(); }
 function exportData() { downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${stamp()}.json`); }
 function importData(e) {
-  const file = e.target.files[0]; if (!file) return;
+  const input = e.target, file = input.files[0]; if (!file) return;
+  input.value = ""; // permite importar o mesmo arquivo de novo
   const r = new FileReader();
   r.onload = () => {
     try {
@@ -1716,7 +1729,7 @@ function importData(e) {
       if (!data || !Array.isArray(data.teams)) throw new Error("formato");
       if (!confirm("Substituir todos os dados atuais pelos do arquivo?")) return;
       state = normalize(data); logEv("Dados importados de arquivo JSON"); save(); toast("Dados importados"); render();
-    } catch (err) { toast("Arquivo JSON inválido"); }
+    } catch (err) { warn("Arquivo JSON inválido ou de outro sistema."); }
   };
   r.readAsText(file);
 }

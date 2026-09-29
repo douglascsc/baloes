@@ -4,8 +4,10 @@ Aplicação web estática para operar a modalidade Robô Estoura Balão (Ensino 
 Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos no `localStorage` do navegador.
 
 ## Arquivos
-- `index.html`, `style.css`, `script.js`
-- `assets/robosapiens.png`, `assets/ifsul.svg`
+- `index.html`, `style.css`, `script.js`: o sistema (abre direto no navegador).
+- `assets/`: logotipos.
+- `servidor.py` + `iniciar-servidor.bat`: modo com dois computadores (telão em outro PC), opcional.
+- `sumulas/`: súmulas em Word para imprimir e o gerador delas.
 
 ## Telas
 | Tela | Função |
@@ -37,11 +39,11 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 
 ## Confronto Direto
 - **Fase preliminar (Configurações):** padrão **todos contra todos**: com 7 equipes são **21 confrontos** e cada equipe joga 6 vezes; com 8 equipes, 28 confrontos. Também dá para escolher 2 ou 4 jogos por equipe (7 ou 14 confrontos com 7 equipes). Nunca há adversário repetido; se o número de equipes não permitir, o sistema avisa e usa o maior possível.
-- **Fase preliminar:** funciona com qualquer número de equipes (mínimo 4). N equipes geram N confrontos: 6 → 6, 7 → 7, 8 → 8, 10 → 10. Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas. A exceção é com 4 equipes, em que isso é matematicamente impossível; o sistema avisa. Os 4 primeiros vão às semifinais.
-- Confronto: Round 1 (2 min) → intervalo (2 min, automático) → Round 2 (1 min) → conferência do resultado.
-- +100 por balão adversário · +30 quando o adversário sai da arena.
+- Funciona com qualquer número de equipes (mínimo 4). A ordem dos confrontos evita que uma equipe jogue duas vezes seguidas; com 4 equipes isso é matematicamente impossível e o sistema avisa. Os 4 primeiros vão às semifinais.
+- Confronto: Round 1 (padrão 2 min) → intervalo (padrão 2 min, automático) → Round 2 (padrão 1 min) → conferência do resultado. Os tempos são configuráveis.
+- +100 por balão adversário · +30 quando o adversário sai da arena (configuráveis).
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** reabre um confronto encerrado.
-- Classificação: vitória 3, empate 1, derrota 0.
+- Classificação: vitória 3, empate 1, derrota 0 (configurável).
 - **Semifinais** geradas automaticamente: 1º × 4º e 2º × 3º. **Final:** vencedores das semifinais.
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
@@ -71,6 +73,7 @@ Não precisa de internet nem de banco de dados: os dois PCs só precisam estar n
 3. No topo do sistema aparece **🟢 Telão em rede**. A tela **Telão** também mostra o endereço.
 
 - Só o PC que registra consegue alterar os dados. O cronômetro do telão é sincronizado com o do PC de registro.
+- Qualquer aparelho da mesma rede que abrir o endereço consegue **ver** o telão (inclusive a pontuação, mesmo oculta na tela). Use uma rede de confiança, como o roteador do celular.
 - Cópia automática a cada alteração: `dados-competicao.json`, na pasta do sistema.
 - Se a rede cair, o registro continua normalmente. O telão mostra um aviso e volta sozinho quando a conexão retornar.
 - Rede da escola bloqueando a comunicação entre computadores? Use o roteador do celular ou um cabo de rede direto entre os dois PCs. Com cabo direto, o endereço mostrado é do tipo `http://169.254.x.x:8000` e aparece marcado como "cabo de rede direto". Pode levar cerca de 1 minuto depois de ligar o cabo para ele aparecer; se não aparecer, feche e abra o `.bat` de novo.
@@ -78,7 +81,7 @@ Não precisa de internet nem de banco de dados: os dois PCs só precisam estar n
 
 ## Planilha de resultados (Excel)
 Em **Config. → 📊 Exportar planilha (Excel)**, ou pelo botão na Classificação Geral, é gerado um arquivo `.xlsx`, sem precisar de internet, com as abas:
-Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Marcações · Confronto - Jogos · Confronto - Classificação · Confronto - Marcações · Classificação Geral.
+Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Marcações · Confronto - Jogos · Confronto - Classificação · Confronto - Marcações · Classificação Geral · Cronograma · Histórico.
 Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica fixo e com filtro.
 
 ## Operação (atalhos e avisos)
