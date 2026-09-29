@@ -189,11 +189,13 @@ function signed(n) { n = num(n); return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs
 function pad2(n) { return String(Math.max(0, Math.round(num(n)))).padStart(2, "0"); }
 function fmt(sec) { sec = Math.max(0, Math.ceil(num(sec))); return `${pad2(Math.floor(sec / 60))}:${pad2(sec % 60)}`; }
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, type = "ok") {
   const e = document.getElementById("toast"); if (!e) return;
-  e.textContent = msg; e.classList.add("show"); clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => e.classList.remove("show"), 2400);
+  e.textContent = msg; e.className = `show ${type}`; clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => e.classList.remove("show"), type === "warn" ? 3600 : 2400);
 }
+// Aviso (ação recusada/atenção): fica mais tempo e com cor de alerta
+const warn = msg => toast(msg, "warn");
 function beep() {
   if (TELAO_WINDOW) return;
   try {
@@ -204,8 +206,10 @@ function beep() {
 }
 function textOn(hex) {
   const h = str(hex).replace("#", ""); if (h.length !== 6) return "#111";
-  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
-  return (0.299 * r + 0.587 * g + 0.114 * b) > 160 ? "#111" : "#fff";
+  // escolhe preto ou branco pelo maior contraste (WCAG)
+  const L = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const lum = 0.2126 * L[0] + 0.7152 * L[1] + 0.0722 * L[2];
+  return (lum + 0.05) / 0.05 >= 1.05 / (lum + 0.05) ? "#111" : "#fff";
 }
 const main = () => document.getElementById("main");
 
@@ -249,12 +253,15 @@ function nav(view) { state.view = view; save(); render(); window.scrollTo({ top:
 function render() {
   if (TELAO_WINDOW) { renderTelaoWindow(); return; }
   const v = state.view;
-  document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  document.querySelectorAll(".nav-btn").forEach(b => { b.classList.toggle("active", b.dataset.view === v); if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   ({ inicio, equipes, cores, arena, confrontos, geral, telao, config })[v]();
+  document.querySelectorAll("#main thead th").forEach(th => th.setAttribute("scope", "col"));
+  updateTvPill();
   updateTimers();
 }
-function head(title, sub, action = "") {
-  return `<div class="page-head"><div><div class="eyebrow">RoboSapiens 2026 · IFSul Sapiranga</div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ""}</div>${action ? `<div class="head-actions">${action}</div>` : ""}</div>`;
+const MODE_TAGS = { arena: "🎈 ARENA LIVRE · classificação própria", cup: "⚔️ CONFRONTO DIRETO · classificação própria", geral: "🏆 ARENA LIVRE + CONFRONTO DIRETO" };
+function head(title, sub, action = "", mode = "", compact = false) {
+  return `<div class="page-head ${compact ? "compact" : ""}"><div>${mode ? `<span class="mode-tag ${mode}">${MODE_TAGS[mode]}</span>` : ""}<h1>${title}</h1>${sub && !compact ? `<p>${sub}</p>` : ""}</div>${action ? `<div class="head-actions">${action}</div>` : ""}</div>`;
 }
 
 /* ============================ INÍCIO ============================ */
@@ -271,11 +278,11 @@ function inicio() {
       ${stat("Equipes", teams().length, "👥", "cadastradas")}
       ${stat("Cores", state.colors.length, "🎨", "de balões")}
       ${stat("Arena Livre", `${fs.done}/${fs.total}`, "🎈", "tentativas realizadas")}
-      ${stat("Confronto Direto", `${cs.done}/${cs.total}`, "⚔️", cs.stageText)}
+      ${stat("Confronto Direto", cs.total ? `${cs.done}/${cs.total}` : "—", "⚔️", cs.total ? cs.stageText : "fase preliminar não gerada")}
     </div>
     <div class="grid g2 mt">
-      <div class="card"><h3>Agora</h3>${now}</div>
-      <div class="card"><h3>Próximos</h3>
+      <div class="card"><h2>Agora</h2>${now}</div>
+      <div class="card"><h2>Próximos</h2>
         <div class="next-list">
           <div><span class="tag arena">ARENA LIVRE</span> ${nf ? `<b>${esc(teamName(nf.teamId))}</b> · Rodada ${nf.round}` : `<span class="muted">${fs.total ? "Concluída ✓" : "Cadastre equipes"}</span>`}</div>
           <div><span class="tag cup">CONFRONTO DIRETO</span> ${nm ? `<b>${esc(teamName(nm.a))} × ${esc(teamName(nm.b))}</b> · ${esc(matchLabel(nm))}` : `<span class="muted">${cs.total ? (champ ? "Competição encerrada ✓" : "Aguardando próxima fase") : "Gere a fase preliminar"}</span>`}</div>
@@ -290,7 +297,7 @@ function inicio() {
       <button class="step" onclick="nav('geral')"><i>5</i><b>Classificação Geral</b><span>Arena Livre + Confronto Direto</span></button>
       <button class="step" onclick="nav('telao')"><i>📺</i><b>Telão</b><span>Tela para o público</span></button>
     </div>
-    <div class="card mt"><h3>Regras essenciais</h3>
+    <div class="card mt"><h2>Regras essenciais</h2>
       <div class="grid g2">
         <div class="notice"><b>🎈 Arena Livre</b> — 2,70 × 2,70 m · uma equipe por vez · ${state.settings.freeSeconds} s por tentativa · +50 balão de outra cor · −50 balão da própria cor · −30 saída da arena</div>
         <div class="notice cup"><b>⚔️ Confronto Direto</b> — 1,20 × 1,20 m · Round 1 até 2 min · intervalo até 2 min · Round 2 até 1 min · +100 por balão adversário · +30 quando o adversário sai</div>
@@ -332,23 +339,25 @@ function teamForm(id) {
   document.getElementById("teamF").onsubmit = e => {
     e.preventDefault(); const f = new FormData(e.target);
     const data = { name: str(f.get("name")), school: str(f.get("school")), robot: str(f.get("robot")), professor: str(f.get("professor")), members: str(f.get("members")), number: str(f.get("number")) ? Math.max(1, Math.round(num(f.get("number"), 1))) : null };
-    if (!data.name || !data.school) return toast("Informe o nome da equipe e da escola.");
-    if (teams().some(x => x !== t && x.name.toLowerCase() === data.name.toLowerCase())) return toast("Já existe uma equipe com esse nome.");
-    if (data.number && teams().some(x => x !== t && x.number === data.number)) return toast(`A numeração ${pad2(data.number)} já está em uso.`);
+    const F = e.target; fieldErr(F);
+    if (!data.name) return fieldErr(F, "name", "Informe o nome da equipe.");
+    if (!data.school) return fieldErr(F, "school", "Informe o nome da escola.");
+    if (teams().some(x => x !== t && x.name.toLowerCase() === data.name.toLowerCase())) return fieldErr(F, "name", "Já existe uma equipe com esse nome.");
+    if (data.number && teams().some(x => x !== t && x.number === data.number)) return fieldErr(F, "number", `A numeração ${pad2(data.number)} já está em uso por ${teams().find(x => x !== t && x.number === data.number).name}.`);
     if (t) Object.assign(t, data); else state.teams.push({ id: uid(), ...data });
     save(); closeModal(); toast(t ? "Equipe atualizada" : "Equipe adicionada"); render();
   };
 }
 const editTeam = id => teamForm(id);
 function clearNumbers() {
-  if (!teams().some(t => t.number)) return toast("As equipes já estão sem numeração.");
+  if (!teams().some(t => t.number)) return warn("As equipes já estão sem numeração.");
   if (!confirm("Remover a numeração de todas as equipes? Elas voltam a aparecer como “Equipe XX” até um novo sorteio.")) return;
   teams().forEach(t => { t.number = null; }); save(); toast("Numeração removida"); render();
 }
 function deleteTeam(id) {
   const t = findTeam(id); if (!t) return;
-  if (state.free.current?.teamId === id) return toast("A equipe está na arena agora. Cancele a tentativa antes.");
-  if (state.cup.matches.some(m => m.a === id || m.b === id)) return toast("A equipe está nos confrontos. Reinicie os confrontos em Configurações para excluí-la.");
+  if (state.free.current?.teamId === id) return warn("A equipe está na arena agora. Cancele a tentativa antes.");
+  if (state.cup.matches.some(m => m.a === id || m.b === id)) return warn("A equipe está nos confrontos. Reinicie os confrontos em Configurações para excluí-la.");
   const n = state.free.attempts.filter(a => a.teamId === id).length;
   if (!confirm(`Excluir a equipe "${t.name}"?${n ? `\n\nAs ${n} tentativa(s) dela na Arena Livre também serão apagadas.` : ""}`)) return;
   state.teams = state.teams.filter(x => x.id !== id);
@@ -357,7 +366,7 @@ function deleteTeam(id) {
   save(); toast("Equipe excluída"); render();
 }
 function drawNumbers() {
-  if (!teams().length) return toast("Cadastre as equipes primeiro.");
+  if (!teams().length) return warn("Cadastre as equipes primeiro.");
   const warn = state.cup.matches.length ? "\n\nOs confrontos já gerados NÃO mudam; para usar a nova numeração, gere a fase preliminar novamente." : "";
   if (!confirm("Sortear a numeração de todas as equipes?" + warn)) return;
   const nums = shuffle(teams().map((_, i) => i + 1));
@@ -381,7 +390,7 @@ function cores() {
 }
 function colorForm(id) {
   const c = id ? state.colors.find(x => x.id === id) : null;
-  if (!c && state.colors.length >= 8) return toast("Limite de 8 cores atingido.");
+  if (!c && state.colors.length >= 8) return warn("Limite de 8 cores atingido.");
   const used = new Set(state.colors.map(x => x.number)), next = [1, 2, 3, 4, 5, 6, 7, 8].find(n => !used.has(n)) || 8;
   openModal(`<h2>${c ? "Editar cor" : "Nova cor"}</h2><form id="colorF"><div class="form-grid">
       <div><label>Número *</label><input name="number" type="number" min="1" max="8" required value="${c ? c.number : next}"></div>
@@ -391,8 +400,9 @@ function colorForm(id) {
   document.getElementById("colorF").onsubmit = e => {
     e.preventDefault(); const f = new FormData(e.target);
     const data = { number: Math.min(8, Math.max(1, Math.round(num(f.get("number"), next)))), name: str(f.get("name")), hex: str(f.get("hex")) || "#9e9e9e" };
-    if (!data.name) return toast("Informe o nome da cor.");
-    if (state.colors.some(x => x !== c && x.number === data.number)) return toast(`O número ${data.number} já está em uso.`);
+    const F = e.target; fieldErr(F);
+    if (!data.name) return fieldErr(F, "name", "Informe o nome da cor.");
+    if (state.colors.some(x => x !== c && x.number === data.number)) return fieldErr(F, "number", `O número ${data.number} já está em uso (${state.colors.find(x => x !== c && x.number === data.number).name}).`);
     if (c) Object.assign(c, data); else state.colors.push({ id: uid(), ...data });
     save(); closeModal(); toast(c ? "Cor atualizada" : "Cor adicionada"); render();
   };
@@ -436,8 +446,8 @@ function drawOf(teamId) { return state.free.draws?.[teamId] || null; }
 function allDrawn() { return teams().length > 0 && teams().every(t => drawOf(t.id)); }
 function drawColors() {
   if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
-  if (!teams().length) return toast("Cadastre as equipes antes.");
-  if (state.free.current) return toast("Há uma equipe na arena. Registre ou cancele a tentativa antes.");
+  if (!teams().length) return warn("Cadastre as equipes antes.");
+  if (state.free.current) return warn("Há uma equipe na arena. Registre ou cancele a tentativa antes.");
   const started = state.free.attempts.length > 0, has = teams().some(t => drawOf(t.id));
   if (has && !confirm(`Sortear novamente as cores de todas as equipes?${started ? "\n\nAs tentativas já registradas mantêm a cor com que foram disputadas; a nova cor vale para as próximas rodadas." : ""}`)) return;
   if (teams().length > state.colors.length) toast(`Há mais equipes (${teams().length}) que cores (${state.colors.length}): algumas cores vão se repetir.`);
@@ -459,10 +469,11 @@ function setDrawColor(teamId, colorId) {
   if (other && !confirm(`A cor ${c.number} (${c.name}) já é de ${other.name}. Usar mesmo assim?`)) return render();
   state.free.draws[teamId] = snap(c); save(); toast("Cor alterada"); render();
 }
-function teamColorsCard() {
+function teamColorsCard(inArena = false) {
   const has = teams().some(t => drawOf(t.id)), missing = has && !allDrawn();
+  if (inArena && !has) return "";
   const rows = sortedTeams().map(t => { const c = drawOf(t.id); return `<div class="q-row">${c ? `<span class="q-color" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</span>` : `<span class="q-color none">?</span>`}${teamCell(t)}${c ? `<select class="mini-select" onchange="setDrawColor('${esc(t.id)}',this.value)" aria-label="Cor de ${esc(t.name)}">${sortedColors().map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? "selected" : ""}>${esc(x.number)} · ${esc(x.name)}</option>`).join("")}</select>` : `<span class="chip wait">sem cor</span>`}</div>`; }).join("");
-  return `<div class="card"><div class="card-head"><h3>🎨 Cores das equipes (Arena Livre)</h3>
+  return `<div class="card"><div class="card-head"><h2>🎨 Cores das equipes (Arena Livre)</h2>
     ${has ? `<button class="btn small ghost" onclick="drawColors()">↻ Sortear de novo</button>` : ""}</div>
     <p class="muted small">Sorteio único antes de chamar as equipes. A cor vale para todas as rodadas.</p>
     ${has ? "" : `<button class="btn primary big mt-s" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
@@ -470,16 +481,18 @@ function teamColorsCard() {
     <div class="mt-s">${rows}</div></div>`;
 }
 function callTeam(teamId, round) {
-  if (state.free.current) return toast("Já existe uma equipe na arena. Registre ou cancele a tentativa atual.");
-  if (liveMatch()) return toast("Há um Confronto Direto em andamento. Finalize-o antes.");
+  if (state.free.current) return warn("Já existe uma equipe na arena. Registre ou cancele a tentativa atual.");
+  if (liveMatch()) return warn("Há um Confronto Direto em andamento. Finalize-o antes.");
   if (!state.colors.length) { toast("Cadastre as cores antes."); return nav("cores"); }
-  if (attemptOf(teamId, round)) return toast("Essa tentativa já foi registrada.");
+  if (attemptOf(teamId, round)) return warn("Essa tentativa já foi registrada.");
   const color = drawOf(teamId);
-  if (!color) return toast("Sorteie as cores das equipes antes de chamar para a arena.");
+  if (!color) return warn("Sorteie as cores das equipes antes de chamar para a arena.");
+  const cr = currentFreeRound();
+  if (round > cr && !confirm(`A Rodada ${cr} ainda não terminou.\nChamar ${teamName(teamId)} para a Rodada ${round} mesmo assim?`)) return;
   state.free.current = { id: uid(), teamId, round, color, events: [], timer: newTimer(state.settings.freeSeconds) };
   save(); render();
 }
-function callNext() { const n = nextFree(); if (!n) return toast("Todas as tentativas já foram realizadas."); callTeam(n.teamId, n.round); }
+function callNext() { const n = nextFree(); if (!n) return warn("Todas as tentativas já foram realizadas."); callTeam(n.teamId, n.round); }
 function freeToggle() {
   const t = state.free.current?.timer; if (!t) return;
   if (t.status === "running") tPause(t); else if (t.status !== "over") tStart(t);
@@ -487,12 +500,12 @@ function freeToggle() {
 }
 function freeEvent(i) {
   const cur = state.free.current, ev = FREE_EVENTS[i]; if (!cur || !ev) return;
-  if (cur.timer.status === "idle") return toast("Inicie o cronômetro antes de marcar pontos.");
+  if (cur.timer.status === "idle") return warn("Inicie o cronômetro antes de marcar pontos.");
   cur.events.push({ id: uid(), pts: ev.pts, label: ev.label, t: elapsed(cur.timer), seq: Date.now() });
   save(); render();
 }
 function freeUndo() {
-  const cur = state.free.current; if (!cur || !cur.events.length) return toast("Nenhuma marcação para desfazer.");
+  const cur = state.free.current; if (!cur || !cur.events.length) return warn("Nenhuma marcação para desfazer.");
   const e = cur.events.pop(); save(); toast(`Desfeito: ${signed(e.pts)} ${e.label}`); render();
 }
 function freeRemoveEvent(id) {
@@ -501,7 +514,7 @@ function freeRemoveEvent(id) {
 }
 function freeFinish() {
   const cur = state.free.current; if (!cur) return;
-  if (cur.timer.status === "idle") return toast("A tentativa ainda não começou.");
+  if (cur.timer.status === "idle") return warn("A tentativa ainda não começou.");
   const total = attemptTotal(cur);
   if (!confirm(`Registrar o resultado de ${teamName(cur.teamId)} na Rodada ${cur.round}?\n\nPontuação: ${signed(total)}`)) return;
   state.free.attempts.push({ id: cur.id, teamId: cur.teamId, round: cur.round, color: cur.color, events: cur.events, at: new Date().toISOString() });
@@ -530,12 +543,11 @@ function freeRanking() {
 /* ============================ TELA: ARENA LIVRE ============================ */
 function arena() {
   const cur = state.free.current, fs = freeSummary(), R = state.settings.freeRounds;
-  main().innerHTML = head("🎈 Arena Livre", `Uma equipe por vez · ${R} rodada${R > 1 ? "s" : ""} · ${state.settings.freeSeconds} s por tentativa · arena 2,70 × 2,70 m`,
-    `${eyeBtn()}<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>`) +
-    `<div class="mode-banner arena"><b>ARENA LIVRE</b><span>Prova individual — classificação própria, separada do Confronto Direto.</span><span class="pill">${fs.done}/${fs.total} tentativas</span></div>
-    <div class="arena-layout">
+  main().innerHTML = head("Arena Livre", `Uma equipe por vez · ${R} rodada${R > 1 ? "s" : ""} · ${state.settings.freeSeconds} s por tentativa · arena 2,70 × 2,70 m · <b>${fs.done}/${fs.total} tentativas</b>`,
+    `<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>`, "arena", !!cur) +
+    `<div class="arena-layout">
       <div>${cur ? freeStage(cur) : freeIdle()}</div>
-      <div>${freeQueueCard()}<div class="mt">${teamColorsCard()}</div></div>
+      <div>${freeQueueCard()}<div class="mt">${teamColorsCard(true)}</div></div>
     </div>
     ${freeRankingCard()}`;
 }
@@ -561,7 +573,7 @@ function freeIdle() {
 }
 function freeStage(cur) {
   const t = findTeam(cur.teamId), tm = cur.timer, total = attemptTotal(cur);
-  const toggle = tm.status === "running" ? `⏸ Pausar` : tm.status === "paused" ? `▶ Retomar` : `▶ Iniciar ${state.settings.freeSeconds} s`;
+  const toggle = tm.status === "running" ? `❚❚ Pausar` : tm.status === "paused" ? `▶ Retomar` : `▶ Iniciar ${state.settings.freeSeconds} s`;
   const statusTxt = { idle: "PRONTA PARA INICIAR", running: "EM ANDAMENTO", paused: "PAUSADA", over: "TEMPO ESGOTADO" }[tm.status];
   return `<div class="card stage live-${tm.status}">
     <div class="stage-top"><span class="pill">RODADA ${cur.round} DE ${state.settings.freeRounds}</span><span class="pill">${teamNo(t)}</span></div>
@@ -572,12 +584,13 @@ function freeStage(cur) {
       <div class="stage-score"><span>PONTOS</span><b class="${total < 0 ? "minus" : ""}">${signed(total)}</b></div>
     </div>
     <div class="score-btns">${FREE_EVENTS.map((e, i) => `<button class="btn score ${e.cls}" onclick="freeEvent(${i})" ${tm.status === "idle" ? "disabled" : ""}><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
+    ${tm.status === "idle" ? `<p class="hint">Inicie o cronômetro para liberar a pontuação. <kbd>Espaço</kbd> inicia/pausa.</p>` : ""}
     <div class="ctrl-row">
       <button class="btn ${tm.status === "running" ? "" : "primary"} big grow" onclick="freeToggle()" ${tm.status === "over" ? "disabled" : ""}>${toggle}</button>
       <button class="btn big" onclick="freeUndo()" ${cur.events.length ? "" : "disabled"}>↶ Desfazer última</button>
       <button class="btn warning big grow" onclick="freeFinish()" ${tm.status === "idle" ? "disabled" : ""}>✓ Registrar resultado</button>
     </div>
-    <div class="log">${cur.events.slice().reverse().map(e => `<div class="log-item"><span>${esc(e.t)} · ${esc(e.label)}</span><b class="${e.pts >= 0 ? "plus" : "minus"}">${signed(e.pts)}</b><button class="x" title="Remover esta marcação" onclick="freeRemoveEvent('${esc(e.id)}')">✕</button></div>`).join("") || `<div class="muted small">Nenhuma marcação ainda.</div>`}</div>
+    <div class="log">${cur.events.slice().reverse().map(e => `<div class="log-item"><span>${esc(e.t)} · ${esc(e.label)}</span><b class="${e.pts >= 0 ? "plus" : "minus"}">${signed(e.pts)}</b><button class="x" title="Remover esta marcação" aria-label="Remover esta marcação" onclick="freeRemoveEvent('${esc(e.id)}')">✕</button></div>`).join("") || `<div class="muted small">Nenhuma marcação ainda.</div>`}</div>
     <div class="right"><button class="btn small ghost" onclick="freeCancel()">✕ Cancelar tentativa</button></div>
   </div>`;
 }
@@ -600,18 +613,18 @@ function freeQueueCard() {
     }).join("");
     html += `<details class="q-round" ${r === cr ? "open" : ""}><summary><b>Rodada ${r}</b><span class="muted">${done}/${items.length}</span></summary>${rows || `<div class="muted small">Sem equipes.</div>`}</details>`;
   }
-  return `<div class="card"><h3>Fila da Arena Livre</h3>${html}</div>`;
+  return `<div class="card"><h2>Fila da Arena Livre</h2>${html}</div>`;
 }
 function freeRankingCard() {
   const R = state.settings.freeRounds, rk = freeRanking();
   const rows = (reveal ? rk : [...rk].sort((a, b) => byNum(a.team, b.team))).map((x, i) => `<tr>
-      <td class="pos">${reveal ? `${i + 1}º` : "–"}</td><td>${teamCell(x.team)}</td>
+      ${reveal ? `<td class="pos">${i + 1}º</td>` : ""}<td>${teamCell(x.team)}</td>
       ${x.scores.map(v => `<td class="num">${v === null ? `<span class="muted">—</span>` : hide(signed(v), v < 0 ? "minus" : "")}</td>`).join("")}
       <td class="num total">${x.done ? hide(signed(x.total), x.total < 0 ? "minus" : "") : `<span class="muted">—</span>`}</td></tr>`).join("");
   const hist = [...state.free.attempts].sort((a, b) => str(b.at).localeCompare(str(a.at))).map(a => `<div class="log-item"><span><b>${esc(teamName(a.teamId, "Equipe removida"))}</b> · Rodada ${a.round} · ${colorChip(a.color)}</span><b>${hide(signed(attemptTotal(a)))}</b><button class="btn tiny danger" onclick="freeVoid('${esc(a.id)}')">Anular</button></div>`).join("");
-  return `<div class="card mt"><div class="card-head"><h3>🏆 Classificação da Arena Livre</h3>${eyeBtn()}</div>
+  return `<div class="card mt"><div class="card-head"><h2>🏆 Classificação da Arena Livre</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
-    <div class="table-wrap"><table class="table"><thead><tr><th>Pos.</th><th>Equipe</th>${Array.from({ length: R }, (_, i) => `<th class="num">R${i + 1}</th>`).join("")}<th class="num">${state.settings.freeRankMode === "melhor" ? "Melhor" : "Total"}</th></tr></thead><tbody>${rows || `<tr><td colspan="${R + 3}">Nenhuma equipe.</td></tr>`}</tbody></table></div>
+    <div class="table-wrap"><table class="table" aria-label="Classificação da Arena Livre"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th>${Array.from({ length: R }, (_, i) => `<th class="num">R${i + 1}</th>`).join("")}<th class="num">${state.settings.freeRankMode === "melhor" ? "Melhor" : "Total"}</th></tr></thead><tbody>${rows || `<tr><td colspan="${R + 3}">Nenhuma equipe cadastrada.</td></tr>`}</tbody></table></div>
     <details class="mt-s"><summary class="muted">Histórico de tentativas (${state.free.attempts.length})</summary><div class="log">${hist || `<div class="muted small">Nenhuma tentativa registrada.</div>`}</div></details>
   </div>`;
 }
@@ -683,7 +696,7 @@ function emptyMatch(stage, order, a, b) {
 }
 function generatePrelim() {
   const list = sortedTeams();
-  if (list.length < 4) return toast("São necessárias pelo menos 4 equipes.");
+  if (list.length < 4) return warn("São necessárias pelo menos 4 equipes.");
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
   const pairs = buildPrelimPairs(list.map(t => t.id));
@@ -789,8 +802,8 @@ function champion() { const f = finalMatch(); return winnerOf(f) ? findTeam(f.wi
 /* ---- Condução do confronto ---- */
 function startMatch(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m) return;
-  if (liveMatch()) return toast("Já existe um confronto em andamento.");
-  if (state.free.current) return toast("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
+  if (liveMatch()) return warn("Já existe um confronto em andamento.");
+  if (state.free.current) return warn("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
   if (m.status !== "pending") return;
   Object.assign(m, { status: "live", phase: "r1", timer: newTimer(ROUND1_SECONDS), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false });
   state.cup.liveId = m.id; save(); nav("confrontos");
@@ -804,11 +817,11 @@ function matchToggle() {
 function endRound() {
   const m = liveMatch(); if (!m) return;
   if (m.phase === "r1") {
-    if (m.timer.status === "idle") return toast("O Round 1 ainda não começou.");
+    if (m.timer.status === "idle") return warn("O Round 1 ainda não começou.");
     if (!confirm("Encerrar o Round 1 e iniciar o intervalo?")) return;
     m.phase = "break"; m.timer = newTimer(BREAK_SECONDS); tStart(m.timer);
   } else if (m.phase === "r2") {
-    if (m.timer.status === "idle") return toast("O Round 2 ainda não começou.");
+    if (m.timer.status === "idle") return warn("O Round 2 ainda não começou.");
     if (!confirm("Encerrar o Round 2?")) return;
     m.phase = "review"; m.timer = newTimer(0); m.timer.status = "over"; reviewRound = 2;
   }
@@ -822,8 +835,8 @@ function activeRound(m) { return m.phase === "r1" ? 1 : m.phase === "r2" ? 2 : m
 function matchEvent(side, i) {
   const m = liveMatch(), ev = MATCH_EVENTS[i]; if (!m || !ev) return;
   const r = activeRound(m);
-  if (!r) return toast("Intervalo: registro de pontos fechado. Use ↶ Desfazer para corrigir.");
-  if ((m.phase === "r1" || m.phase === "r2") && m.timer.status === "idle") return toast("Inicie o round antes de marcar pontos.");
+  if (!r) return warn("Intervalo: registro de pontos fechado. Use ↶ Desfazer para corrigir.");
+  if ((m.phase === "r1" || m.phase === "r2") && m.timer.status === "idle") return warn("Inicie o round antes de marcar pontos.");
   m.rounds[r].events.push({ id: uid(), side, pts: ev.pts, label: ev.label, t: m.phase === "review" ? "correção" : elapsed(m.timer), seq: Date.now() });
   save(); render();
 }
@@ -831,7 +844,7 @@ function matchUndo(side) {
   const m = liveMatch(); if (!m) return;
   let best = null;
   [1, 2].forEach(r => m.rounds[r].events.forEach((e, idx) => { if (e.side === side && (!best || e.seq >= best.e.seq)) best = { r, idx, e }; }));
-  if (!best) return toast(`Nenhuma marcação de ${teamName(side === "a" ? m.a : m.b)} para desfazer.`);
+  if (!best) return warn(`Nenhuma marcação de ${teamName(side === "a" ? m.a : m.b)} para desfazer.`);
   m.rounds[best.r].events.splice(best.idx, 1);
   save(); toast(`Desfeito: ${signed(best.e.pts)} de ${teamName(side === "a" ? m.a : m.b)}`); render();
 }
@@ -846,7 +859,7 @@ function confirmResult() {
   const sa = sideScore(m, "a"), sb = sideScore(m, "b");
   let winner = sa > sb ? m.a : sb > sa ? m.b : "draw", byDecision = false;
   if (winner === "draw" && m.stage !== "prelim") {
-    if (!m.pick) return toast("Empate em fase eliminatória: selecione o vencedor definido pela comissão.");
+    if (!m.pick) return warn("Empate em fase eliminatória: selecione o vencedor definido pela comissão.");
     winner = m.pick; byDecision = true;
   }
   const txt = winner === "draw" ? "EMPATE" : `Vencedor: ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`;
@@ -889,8 +902,8 @@ function cancelMatch() {
 }
 function reopenMatch(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;
-  if (liveMatch()) return toast("Finalize o confronto em andamento antes de corrigir outro.");
-  if (m.stage === "semi" && finalMatch()?.status === "done") return toast("A final já foi disputada. Corrija a final primeiro ou gere novamente a fase.");
+  if (liveMatch()) return warn("Finalize o confronto em andamento antes de corrigir outro.");
+  if (m.stage === "semi" && finalMatch()?.status === "done") return warn("A final já foi disputada. Corrija a final primeiro ou gere novamente a fase.");
   if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim" && x.status === "done") && !confirm("Já existem jogos eliminatórios disputados. Se a correção mudar a classificação, eles serão apagados. Continuar?")) return;
   m._backup = JSON.stringify({ rounds: m.rounds, winner: m.winner, pick: m.pick, byDecision: m.byDecision, phase: m.phase });
   Object.assign(m, { status: "live", phase: "review", timer: newTimer(0) }); m.timer.status = "over";
@@ -901,12 +914,11 @@ function reopenMatch(id) {
 /* ============================ TELA: CONFRONTOS ============================ */
 function confrontos() {
   const live = liveMatch(), champ = champion(), n = prelims().length;
-  main().innerHTML = head("⚔️ Confronto Direto", "Fase preliminar (cada equipe joga 2 vezes) → Semifinais (1º×4º, 2º×3º) → Final",
-    `${eyeBtn()}<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>${n ? `<button class="btn small ghost" onclick="generatePrelim()">↻ Gerar novamente</button>` : ""}`) +
-    `<div class="mode-banner cup"><b>CONFRONTO DIRETO</b><span>Duas equipes por vez na arena de 1,20 × 1,20 m — classificação própria, separada da Arena Livre.</span></div>` +
+  main().innerHTML = head("Confronto Direto", "Duas equipes por vez · arena 1,20 × 1,20 m · Fase preliminar (cada equipe joga 2 vezes) → Semifinais (1º×4º, 2º×3º) → Final",
+    `<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>`, "cup", !!live) +
     (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">CAMPEÃO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
     (!n ? `<div class="card center stage"><h2>Fase preliminar</h2><p class="muted">${teams().length} equipes · cada equipe disputa exatamente 2 confrontos, sem repetição · ${teams().length >= 4 ? `${teams().length} confrontos` : "mínimo 4 equipes"}</p><button class="btn primary huge" onclick="generatePrelim()" ${teams().length < 4 ? "disabled" : ""}>🔀 Gerar fase preliminar</button></div>`
-      : `${phaseTracker()}${live ? livePanel(live) : nextPanel()}
+      : `${live ? livePanel(live) : phaseTracker() + nextPanel()}
       <div class="cup-layout mt">${prelimCard()}${standingsCard()}</div>
       ${bracketCard()}`);
 }
@@ -945,33 +957,35 @@ function livePanel(m) {
   const fighter = (side, tm, sc) => `<div class="fighter ${ph === "review" && sa !== sb && (side === "a" ? sa > sb : sb > sa) ? "win" : ""}">
       ${teamCell(tm)}
       <div class="pts">${sc}</div>
-      <div class="muted small">R1 ${sideScore(m, side, 1)} · R2 ${sideScore(m, side, 2)}</div>
-      <div class="fighter-btns">${MATCH_EVENTS.map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"}><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
-      <button class="btn undo" onclick="matchUndo('${side}')">↶ Desfazer última de ${esc(tm?.name)}</button>
+      <div class="muted small">Round 1: ${sideScore(m, side, 1)} · Round 2: ${sideScore(m, side, 2)}</div>
+      <div class="fighter-btns">${MATCH_EVENTS.map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"} aria-label="${esc(e.short)} para ${esc(tm?.name)}: ${esc(e.label)}"><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
+      <button class="btn undo" onclick="matchUndo('${side}')" aria-label="Desfazer a última marcação de ${esc(tm?.name)}">↶ Desfazer última</button>
     </div>`;
   let ctrl = "";
   if (ph === "r1" || ph === "r2") {
-    const toggle = t.status === "running" ? "⏸ Pausar" : t.status === "paused" ? "▶ Retomar" : `▶ Iniciar Round ${ph === "r1" ? 1 : 2}`;
-    ctrl = `<button class="btn ${t.status === "running" ? "" : "primary"} big grow" onclick="matchToggle()" ${t.status === "over" ? "disabled" : ""}>${toggle}</button><button class="btn warning big grow" onclick="endRound()" ${t.status === "idle" ? "disabled" : ""}>✓ Encerrar Round ${ph === "r1" ? 1 : 2}</button>`;
-  } else if (ph === "break") ctrl = `<button class="btn primary big grow" onclick="startRound2()">▶ Ir para o Round 2</button>`;
+    const toggle = t.status === "running" ? "❚❚ Pausar" : t.status === "paused" ? "▶ Retomar" : `▶ Iniciar Round ${ph === "r1" ? 1 : 2}`;
+    ctrl = `<button class="btn ${t.status === "running" ? "" : "primary"} big" onclick="matchToggle()" ${t.status === "over" ? "disabled" : ""}>${toggle}</button><button class="btn warning big" onclick="endRound()" ${t.status === "idle" ? "disabled" : ""}>✓ Encerrar Round ${ph === "r1" ? 1 : 2}</button>${t.status === "idle" ? `<p class="hint">Inicie o round para liberar a pontuação. <kbd>Espaço</kbd> inicia/pausa.</p>` : ""}`;
+  } else if (ph === "break") ctrl = `<button class="btn primary big" onclick="startRound2()">▶ Ir para o Round 2</button><p class="hint">Intervalo para ajustes nos robôs. Os pontos só podem ser corrigidos (↶ ou ✕).</p>`;
   else {
     const draw = sa === sb;
     const pick = draw && m.stage !== "prelim" ? `<div class="notice warn">Empate em fase eliminatória. Selecione o vencedor conforme decisão da Comissão Organizadora:<div class="actions mt-s">${[m.a, m.b].map(id => `<button class="btn ${m.pick === id ? "primary" : ""}" onclick="pickWinner('${esc(id)}')">${m.pick === id ? "✓ " : ""}${esc(teamName(id))}</button>`).join("")}</div></div>` : "";
     ctrl = `<div class="review">
       <div class="review-res">${draw ? (m.stage === "prelim" ? "EMPATE · 1 ponto para cada" : "EMPATE") : `Vencedor: <b>${esc(teamName(sa > sb ? m.a : m.b))}</b>`}</div>
       ${pick}
-      <div class="review-round muted small">Correções (+) vão para: <button class="btn tiny ${reviewRound === 1 ? "primary" : ""}" onclick="setReviewRound(1)">Round 1</button><button class="btn tiny ${reviewRound === 2 ? "primary" : ""}" onclick="setReviewRound(2)">Round 2</button></div>
+      <div class="review-round muted small">Nova marcação (correção) entra no: <button class="btn tiny ${reviewRound === 1 ? "primary" : ""}" onclick="setReviewRound(1)">Round 1</button><button class="btn tiny ${reviewRound === 2 ? "primary" : ""}" onclick="setReviewRound(2)">Round 2</button></div>
       <button class="btn primary huge" onclick="confirmResult()">✓ Confirmar resultado</button></div>`;
   }
-  const logs = [1, 2].map(r => m.rounds[r].events.slice().reverse().map(e => `<div class="log-item"><span>R${r} · ${esc(e.t)} · <b>${esc(teamName(e.side === "a" ? m.a : m.b))}</b> · ${esc(e.label)}</span><b class="plus">+${e.pts}</b><button class="x" title="Remover esta marcação" onclick="matchRemoveEvent(${r},'${esc(e.id)}')">✕</button></div>`).join("")).reverse().join("");
+  const logs = [1, 2].map(r => m.rounds[r].events.slice().reverse().map(e => `<div class="log-item"><span>R${r} · ${esc(e.t)} · <b>${esc(teamName(e.side === "a" ? m.a : m.b))}</b> · ${esc(e.label)}</span><b class="plus">+${e.pts}</b><button class="x" title="Remover esta marcação" aria-label="Remover esta marcação" onclick="matchRemoveEvent(${r},'${esc(e.id)}')">✕</button></div>`).join("")).reverse().join("");
   return `<div class="card live-panel">
-    <div class="center"><div class="eyebrow">${fix ? "CORREÇÃO · " : "EM ANDAMENTO · "}${esc(matchLabel(m)).toUpperCase()}</div></div>
-    ${bar}
-    ${ph === "review" ? "" : `<div class="timer" data-timer="match">${fmt(left(t))}</div>`}
-    <div class="center"><span class="status-txt s-${ph === "review" ? "over" : t.status}">${t.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</span></div>
-    <div class="versus live">${fighter("a", a, sa)}<div class="vs">×</div>${fighter("b", b, sb)}</div>
-    <div class="ctrl-row">${ctrl}</div>
-    <details class="mt-s" ${logs ? "open" : ""}><summary class="muted">Marcações (${m.rounds[1].events.length + m.rounds[2].events.length}) — clique em ✕ para remover uma específica</summary><div class="log">${logs || `<div class="muted small">Nenhuma marcação.</div>`}</div></details>
+    <div class="live-top"><span class="eyebrow">${fix ? "CORREÇÃO · " : "EM ANDAMENTO · "}${esc(matchLabel(m)).toUpperCase()}</span>${bar}</div>
+    <div class="live-grid">${fighter("a", a, sa)}
+      <div class="live-center">
+        ${ph === "review" ? "" : `<div class="timer" data-timer="match">${fmt(left(t))}</div>`}
+        <span class="status-txt s-${ph === "review" ? "over" : t.status}">${t.status === "running" ? '<i class="dot-live"></i>' : ""}${statusTxt}</span>
+        <div class="live-ctrl">${ctrl}</div>
+      </div>
+    ${fighter("b", b, sb)}</div>
+    <details class="mt-s" ${logs && ph === "review" ? "open" : ""}><summary class="muted">Marcações (${m.rounds[1].events.length + m.rounds[2].events.length}) — clique em ✕ para remover uma específica</summary><div class="log">${logs || `<div class="muted small">Nenhuma marcação.</div>`}</div></details>
     <div class="right"><button class="btn small ghost" onclick="cancelMatch()">${fix ? "✕ Descartar correção" : "✕ Cancelar confronto"}</button></div>
   </div>`;
 }
@@ -990,8 +1004,8 @@ function matchRow(m) {
     <div class="m-side">${chip}${act}</div></div>`;
 }
 function prelimCard() {
-  return `<div class="card"><h3>Fase preliminar · ${prelims().length} confrontos</h3><div class="m-list">${prelims().map(matchRow).join("")}</div>
-    <p class="muted small mt-s">Cada equipe joga exatamente 2 vezes, sem confrontos repetidos e sem jogar duas vezes seguidas.</p></div>`;
+  return `<div class="card"><h2>Fase preliminar · ${prelims().length} confrontos</h2><div class="m-list">${prelims().map(matchRow).join("")}</div>
+    <p class="muted small mt-s">Cada equipe joga exatamente 2 vezes, sem confrontos repetidos${conflicts(prelims().map(m => [m.a, m.b])) ? ". Com este número de equipes não é possível evitar que alguma equipe jogue dois confrontos seguidos." : " e sem jogar duas vezes seguidas."}</p></div>`;
 }
 function teamStatus(id, rows) {
   const live = liveMatch(), nm = nextMatch(), c = champion(), f = finalMatch();
@@ -1017,13 +1031,13 @@ function standingsCard() {
     const cls = reveal && done ? (r.pos <= 4 ? "qual" : "elim") : "";
     const arrows = reveal && done && r.tied ? `<span class="tie-arrows"><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',-1)" title="Subir">▲</button><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',1)" title="Descer">▼</button></span>` : "";
     const tag = reveal && done && r.tied ? `<span class="chip warn">empate</span>` : reveal && r.manual ? `<span class="chip">decisão da comissão</span>` : "";
-    return `<tr class="${cls}"><td class="pos">${reveal ? `${r.pos}º` : "–"}</td><td>${teamCell(r.team, `<div class="row-tags">${teamStatus(r.team.id, rows)}${tag}${arrows}</div>`)}</td>
+    return `<tr class="${cls}">${reveal ? `<td class="pos">${r.pos}º</td>` : ""}<td>${teamCell(r.team, `<div class="row-tags">${teamStatus(r.team.id, rows)}${tag}${arrows}</div>`)}</td>
       <td class="num">${r.J}</td><td class="num">${hide(r.V)}</td><td class="num">${hide(r.E)}</td><td class="num">${hide(r.D)}</td><td class="num hide-sm">${hide(r.SG > 0 ? "+" + r.SG : r.SG)}</td><td class="num total">${hide(r.P)}</td></tr>`;
   }).join("");
   const blocking = done && !semis().length && blockingTie(rows);
-  return `<div class="card"><div class="card-head"><h3>Classificação · fase preliminar</h3>${eyeBtn()}</div>
+  return `<div class="card"><div class="card-head"><h2>Classificação · fase preliminar</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Resultados ocultos — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
-    <div class="table-wrap"><table class="table standings"><thead><tr><th>Pos.</th><th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num hide-sm">Saldo</th><th class="num">Pts</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num hide-sm">Saldo</th><th class="num">Pts</th></tr></thead><tbody>${body}</tbody></table></div>
     ${blocking ? `<div class="notice warn mt-s"><b>Empate não resolvido entre os 4 primeiros.</b> ${reveal ? `Ajuste a ordem com ▲▼ conforme a decisão da Comissão Organizadora e confirme:` : "Revele a pontuação (👁️) para resolver."} ${reveal ? `<div class="mt-s"><button class="btn primary" onclick="confirmTieOrder()">✓ Confirmar ordem e gerar semifinais</button></div>` : ""}</div>` : ""}
     <p class="muted small mt-s">Vitória 3 · Empate 1 · Derrota 0. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
@@ -1035,7 +1049,7 @@ function bracketCard() {
     return `<div class="b-team ${win ? "winner" : ""} ${t ? "" : "ph"}"><span>${t ? esc(t.name) : ph}</span>${m && m.status === "done" ? `<b>${reveal ? sideScore(m, side) : "••"}</b>` : ""}${win ? "<em>✓</em>" : ""}</div>`;
   };
   const box = (m, title, pa, pb) => `<div class="b-match ${m?.status || ""}"><div class="b-title">${title}${m ? ` · ${m.status === "live" ? "● jogando" : m.status === "done" ? (m.byDecision ? "decisão da comissão" : "encerrada") : "a disputar"}` : ""}</div>${slot(m, "a", pa)}${slot(m, "b", pb)}${m && m.status === "pending" && !liveMatch() ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>` : m && m.status === "done" && !liveMatch() ? `<button class="btn tiny" onclick="reopenMatch('${esc(m.id)}')">✏️ Corrigir</button>` : ""}</div>`;
-  return `<div class="card mt ko"><div class="card-head"><h3>🏅 Fase eliminatória</h3><span class="pill">mata-mata</span></div>
+  return `<div class="card mt ko"><div class="card-head"><h2>🏅 Fase eliminatória</h2><span class="pill">mata-mata</span></div>
     <div class="bracket">
       <div class="b-col">${box(s1, "Semifinal 1", "1º colocado", "4º colocado")}${box(s2, "Semifinal 2", "2º colocado", "3º colocado")}</div>
       <div class="b-col mid">${box(f, "FINAL", "Vencedor Semifinal 1", "Vencedor Semifinal 2")}</div>
@@ -1062,14 +1076,14 @@ function geral() {
   const medal = i => reveal ? (["🥇", "🥈", "🥉"][i] || "") : "";
   const fs = freeSummary(), cs = cupSummary();
   const ties = reveal ? rk.map((r, i) => i > 0 && rk[i - 1].total === r.total && rk[i - 1].cup === r.cup && rk[i - 1].arena === r.arena) : [];
-  main().innerHTML = head("🏆 Classificação Geral", "Soma da pontuação da Arena Livre com os pontos marcados no Confronto Direto.", `${eyeBtn()}<button class="btn" onclick="setDisplay('geral');openTelaoWindow()">📺 Mostrar no telão</button><button class="btn" onclick="exportXlsx()">📊 Exportar Excel</button>`) +
+  main().innerHTML = head("Classificação Geral", "Soma da pontuação da Arena Livre com os pontos marcados no Confronto Direto.", `<button class="btn" onclick="setDisplay('geral');openTelaoWindow()">📺 Mostrar no telão</button><button class="btn" onclick="exportXlsx()">📊 Exportar Excel</button>`, "geral") +
     `<div class="grid g2 mb"><div class="notice"><b>🎈 Arena Livre</b> — ${state.settings.freeRankMode === "melhor" ? "melhor rodada" : "soma das rodadas"} · ${fs.done}/${fs.total} tentativas</div>
       <div class="notice cup"><b>⚔️ Confronto Direto</b> — pontos marcados (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"}) · ${cs.done}/${cs.total || 0} confrontos</div></div>
     ${fs.done < fs.total || !cs.total || cs.done < cs.total ? `<div class="notice warn mb">Classificação parcial — ainda há provas a disputar.</div>` : ""}
-    <div class="card"><div class="card-head"><h3>Classificação Geral</h3>${eyeBtn()}</div>
+    <div class="card"><div class="card-head"><h2>Classificação Geral</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
-    <div class="table-wrap"><table class="table geral"><thead><tr><th>Pos.</th><th>Equipe</th><th class="num">🎈 Arena Livre</th><th class="num">⚔️ Confronto Direto</th><th class="num">Total</th></tr></thead><tbody>
-    ${list.map((r, i) => `<tr class="${reveal && i < 3 ? "qual" : ""}"><td class="pos">${reveal ? `${i + 1}º ${medal(i)}` : "–"}</td><td>${teamCell(r.team, ties[i] ? `<div class="row-tags"><span class="chip warn">empate com a equipe acima</span></div>` : "")}</td>
+    <div class="table-wrap"><table class="table geral" aria-label="Classificação Geral"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">🎈 Arena Livre</th><th class="num">⚔️ Confronto Direto</th><th class="num">Total</th></tr></thead><tbody>
+    ${list.map((r, i) => `<tr class="${reveal && i < 3 ? "qual" : ""}">${reveal ? `<td class="pos">${i + 1}º ${medal(i)}</td>` : ""}<td>${teamCell(r.team, ties[i] ? `<div class="row-tags"><span class="chip warn">empate com a equipe acima</span></div>` : "")}</td>
       <td class="num">${hide(signed(r.arena), r.arena < 0 ? "minus" : "")}</td><td class="num">${hide(r.cup)}</td><td class="num total">${hide(signed(r.total), r.total < 0 ? "minus" : "")}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma equipe.</td></tr>`}
     </tbody></table></div>
     <p class="muted small mt-s">Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre. Persistindo, decisão da comissão. O campeão do Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
@@ -1150,18 +1164,25 @@ function sceneBracket() {
 function telao() {
   const d = state.display;
   const opt = (v, l) => `<button class="btn ${d.mode === v ? "primary" : ""}" onclick="setDisplay('${v}')">${l}</button>`;
-  main().innerHTML = head("📺 Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
+  main().innerHTML = head("Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
     `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
-    `<div class="card"><h3>Exibir no telão</h3><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("geral", "🏆 Classificação Geral")}</div>
+    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("geral", "🏆 Classificação Geral")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
     ${netCard()}
     <div class="tv-preview mt"><div class="tv-frame">${telaoScene()}</div></div>`;
 }
 function netCard() {
-  if (NET.on && NET.local) return `<div class="card mt"><h3>🖥️ Telão em outro PC (rede local) ${NET.ok ? `<span class="chip done">🟢 ativo</span>` : `<span class="chip live">🟠 servidor sem resposta</span>`}</h3>
-    <p class="muted small">No PC do telão (mesma rede/Wi-Fi), abra no navegador um destes endereços e dê duplo clique para tela cheia:</p>
-    <div class="net-urls">${NET.urls.length ? NET.urls.map(u => `<code>${esc(u)}</code>`).join("") : `<span class="muted">Nenhum endereço de rede encontrado — confira se este PC está conectado à rede.</span>`}</div></div>`;
-  return `<div class="card mt"><h3>🖥️ Telão em outro PC</h3><p class="muted small">Para usar dois computadores (um registra, outro exibe), abra o sistema pelo <b>iniciar-servidor.bat</b> neste PC. Ele mostra o endereço para abrir no PC do telão. Veja o README.</p></div>`;
+  if (NET.on && NET.local) return `<details class="card mt fold"><summary><b>🖥️ Telão em outro PC (rede local)</b> ${NET.ok ? `<span class="chip done">🟢 ativo</span>` : `<span class="chip live">🟠 servidor sem resposta</span>`}</summary>
+    <p class="muted small mt-s">No PC do telão (mesma rede/Wi-Fi), abra no navegador um destes endereços e dê duplo clique para tela cheia:</p>
+    <div class="net-urls">${NET.urls.length ? NET.urls.map(u => `<code>${esc(u)}</code>`).join("") : `<span class="muted">Nenhum endereço de rede encontrado — confira se este PC está conectado à rede.</span>`}</div></details>`;
+  return `<details class="card mt fold"><summary><b>🖥️ Telão em outro PC</b></summary><p class="muted small mt-s">Para usar dois computadores (um registra, outro exibe), abra o sistema pelo <b>iniciar-servidor.bat</b> neste PC. Ele mostra o endereço para abrir no PC do telão. Veja o README.</p></details>`;
+}
+// Topo: deixa sempre visível o que o público está vendo no telão
+function updateTvPill() {
+  const el = document.getElementById("tvPill"); if (!el) return;
+  const mode = { auto: "ao vivo", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral" }[state.display.mode];
+  el.innerHTML = `📺 Telão: ${mode} · ${state.display.reveal ? "<b>pontuação VISÍVEL</b>" : "pontuação oculta"}`;
+  el.classList.toggle("on", !!state.display.reveal);
 }
 function setDisplay(mode) { state.display.mode = mode; save(); render(); }
 function toggleTvReveal() { state.display.reveal = !state.display.reveal; save(); render(); }
@@ -1299,20 +1320,21 @@ function exportXlsx() {
 function config() {
   const s = state.settings;
   const tb = s.tiebreak.map((x, i) => `<div class="tb-row"><label class="check"><input type="checkbox" ${x.on ? "checked" : ""} onchange="toggleTb(${i})"> <b>${i + 1}. ${TIEBREAKS[x.key].label}</b></label><span class="muted small">${TIEBREAKS[x.key].desc}</span><span class="actions"><button class="btn tiny" onclick="moveTb(${i},-1)" ${i ? "" : "disabled"}>▲</button><button class="btn tiny" onclick="moveTb(${i},1)" ${i < s.tiebreak.length - 1 ? "" : "disabled"}>▼</button></span></div>`).join("");
-  main().innerHTML = head("⚙️ Configurações", "Parâmetros da competição, backup e reinício.") +
+  main().innerHTML = head("Configurações", "Parâmetros da competição, backup e reinício.") +
     `<div class="grid g2">
-      <div class="card"><h3>🎈 Arena Livre</h3><div class="form-grid">
+      <div class="card"><h2>📊 Planilha de resultados</h2><p class="muted small">Arquivo Excel (.xlsx) com todas as etapas: equipes, Arena Livre (classificação, tentativas e cada marcação), Confronto Direto (jogos, classificação e cada marcação) e Classificação Geral.</p><div class="actions mt-s"><button class="btn primary" onclick="exportXlsx()">📊 Exportar planilha (Excel)</button></div></div>
+      <div class="card"><h2>💾 Backup</h2><div class="actions"><button class="btn primary" onclick="exportData()">⬇ Exportar JSON</button><label class="btn file">⬆ Importar JSON<input id="importFile" type="file" accept=".json,application/json" hidden></label></div><p class="muted small mt-s">Os dados ficam salvos neste navegador. Exporte um backup ao final de cada etapa.</p></div>
+      <div class="card"><h2>🎈 Arena Livre</h2><div class="form-grid">
         <div><label>Rodadas por equipe</label><select onchange="setSetting('freeRounds',this.value)">${[1, 2, 3, 4].map(n => `<option ${s.freeRounds === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div><label>Tempo por tentativa (s)</label><input type="number" min="5" max="600" value="${s.freeSeconds}" onchange="setSetting('freeSeconds',this.value)"></div>
         <div class="full"><label>Classificação da Arena Livre</label><select onchange="setSetting('freeRankMode',this.value)"><option value="soma" ${s.freeRankMode === "soma" ? "selected" : ""}>Soma das rodadas</option><option value="melhor" ${s.freeRankMode === "melhor" ? "selected" : ""}>Melhor rodada</option></select></div>
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
         <div class="full"><label class="check"><input type="checkbox" ${s.freeMinZero ? "checked" : ""} onchange="setSetting('freeMinZero',this.checked)"> Não permitir pontuação negativa em uma tentativa (mínimo 0)</label></div>
       </div><p class="muted small mt-s">Confirme essas opções com o regulamento da competição.</p></div>
-      <div class="card"><h3>⚔️ Critérios de desempate (Confronto Direto)</h3><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
-      <div class="card"><h3>📊 Planilha de resultados</h3><p class="muted small">Arquivo Excel (.xlsx) com todas as etapas: equipes, Arena Livre (classificação, tentativas e cada marcação), Confronto Direto (jogos, classificação e cada marcação) e Classificação Geral.</p><div class="actions mt-s"><button class="btn primary" onclick="exportXlsx()">📊 Exportar planilha (Excel)</button></div></div>
-      <div class="card"><h3>💾 Backup</h3><div class="actions"><button class="btn primary" onclick="exportData()">⬇ Exportar JSON</button><label class="btn file">⬆ Importar JSON<input id="importFile" type="file" accept=".json,application/json" hidden></label></div><p class="muted small mt-s">Os dados ficam salvos neste navegador. Exporte um backup ao final de cada etapa.</p></div>
-      <div class="card"><h3>⚠️ Reiniciar</h3><div class="actions col">
+      <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
+      <div class="card"><h2>⚠️ Reiniciar</h2><div class="actions col">
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
+        ${prelims().length ? `<button class="btn danger" onclick="generatePrelim()">↻ Gerar novamente a fase preliminar (apaga confrontos e resultados)</button>` : ""}
         <button class="btn danger" onclick="resetCup()">Zerar Confronto Direto (apaga confrontos e resultados)</button>
         <button class="btn danger" onclick="resetAll()">Resetar tudo (volta às 7 equipes cadastradas)</button></div></div>
     </div>`;
@@ -1351,8 +1373,37 @@ function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) 
 function resetAll() { if (!confirm("Apagar tudo e voltar ao cadastro inicial das equipes?")) return; state = normalize(fresh()); save(); toast("Competição reiniciada"); render(); }
 
 /* ============================ MODAL / EVENTOS GLOBAIS ============================ */
-function openModal(html) { document.getElementById("modalContent").innerHTML = html; document.getElementById("modal").classList.remove("hidden"); document.querySelector("#modalContent input")?.focus(); }
-function closeModal() { document.getElementById("modal").classList.add("hidden"); }
+let modalReturn = null;
+function openModal(html) {
+  modalReturn = document.activeElement;
+  const box = document.getElementById("modalContent");
+  box.innerHTML = `<button type="button" class="modal-x" onclick="closeModal()" aria-label="Fechar">✕</button>${html}`;
+  const h = box.querySelector("h2"); if (h) h.id = "modalTitle";
+  document.getElementById("modal").classList.remove("hidden");
+  (box.querySelector("input,select,textarea") || box.querySelector("button"))?.focus();
+}
+function closeModal() {
+  const m = document.getElementById("modal"); if (m.classList.contains("hidden")) return;
+  m.classList.add("hidden");
+  if (modalReturn && document.body.contains(modalReturn)) modalReturn.focus();
+  modalReturn = null;
+}
+function trapModal(e) {
+  const m = document.getElementById("modal"); if (m.classList.contains("hidden") || e.key !== "Tab") return;
+  const f = [...m.querySelectorAll("button,input,select,textarea,[href]")].filter(x => !x.disabled && x.offsetParent !== null);
+  if (!f.length) return;
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+}
+// Mostra o erro abaixo do campo (sem argumentos: limpa os erros do formulário)
+function fieldErr(form, name, msg) {
+  form.querySelectorAll(".field-error").forEach(x => x.remove());
+  form.querySelectorAll("[aria-invalid]").forEach(x => { x.removeAttribute("aria-invalid"); x.removeAttribute("aria-describedby"); });
+  if (!name) return;
+  const inp = form.querySelector(`[name="${name}"]`); if (!inp) return warn(msg);
+  const d = document.createElement("div"); d.className = "field-error"; d.id = `err-${name}`; d.setAttribute("role", "alert"); d.textContent = msg;
+  inp.setAttribute("aria-invalid", "true"); inp.setAttribute("aria-describedby", d.id); inp.insertAdjacentElement("afterend", d); inp.focus();
+}
 
 function updateTimers() {
   document.querySelectorAll("[data-timer]").forEach(el => {
@@ -1438,6 +1489,13 @@ async function detectServer() {
   } catch (err) { NET.on = false; }
 }
 
+function spaceTarget(e) {
+  if (e.code !== "Space" && e.key !== " ") return false;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || !document.getElementById("modal").classList.contains("hidden")) return false;
+  if (state.view === "arena") { const t = state.free.current?.timer; return !!t && t.status !== "over"; }
+  if (state.view === "confrontos") { const m = liveMatch(); return !!m && (m.phase === "r1" || m.phase === "r2") && m.timer.status !== "over"; }
+  return false;
+}
 function startUI() {
   if (TELAO_WINDOW) {
     window.addEventListener("storage", e => { if (e.key === KEY && !NET.on) { state = load(); render(); } });
@@ -1448,8 +1506,15 @@ function startUI() {
     document.getElementById("btnTelao").onclick = () => openTelaoWindow();
     document.getElementById("btnFullscreen").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); };
     document.getElementById("netPill").onclick = () => nav("telao");
+    document.getElementById("tvPill").onclick = () => nav("telao");
     document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
-    document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); if (document.body.classList.contains("telao-full")) exitTelao(); } });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") { closeModal(); if (document.body.classList.contains("telao-full")) exitTelao(); }
+      trapModal(e);
+      if (spaceTarget(e)) { e.preventDefault(); if (!e.repeat) { if (state.view === "arena") freeToggle(); else matchToggle(); } }
+    });
+    // impede que o Espaço "clique" de novo no último botão de pontuação focado
+    document.addEventListener("keyup", e => { if (spaceTarget(e)) e.preventDefault(); });
     document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("telao-full")) exitTelao(); });
     // Mantém o telão em tela cheia (na mesma janela) atualizado a cada ação
     const _render = render;

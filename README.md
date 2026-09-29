@@ -33,7 +33,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
-- **Fase preliminar:** N equipes → N confrontos (7 equipes → 7 confrontos). Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas.
+- **Fase preliminar:** funciona com qualquer número de equipes (mínimo 4). N equipes geram N confrontos: 6 → 6, 7 → 7, 8 → 8, 10 → 10. Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas. A exceção é com 4 equipes, em que isso é matematicamente impossível; o sistema avisa. Os 4 primeiros vão às semifinais.
 - Confronto: Round 1 (2 min) → intervalo (2 min, automático) → Round 2 (1 min) → conferência do resultado.
 - +100 por balão adversário · +30 quando o adversário sai da arena.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** reabre um confronto encerrado.
@@ -76,3 +76,8 @@ Não precisa de internet nem de banco de dados: os dois PCs só precisam estar n
 Em **Config. → 📊 Exportar planilha (Excel)**, ou pelo botão na Classificação Geral, é gerado um arquivo `.xlsx`, sem precisar de internet, com as abas:
 Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Marcações · Confronto - Jogos · Confronto - Classificação · Confronto - Marcações · Classificação Geral.
 Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica fixo e com filtro.
+
+## Operação (atalhos e avisos)
+- **Barra de espaço:** inicia e pausa o cronômetro da Arena Livre ou do round em andamento.
+- **Topo da tela:** o indicador **📺 Telão** mostra o que o público está vendo e se a pontuação está visível.
+- **Ações recusadas** (por exemplo, marcar pontos antes de iniciar) aparecem em destaque no topo, sem cobrir os botões.
