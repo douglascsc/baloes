@@ -259,6 +259,7 @@ function load() {
   return normalize(fresh());
 }
 let state = load();
+state.view = "inicio"; // o sistema sempre abre no Início (não volta para a última tela usada)
 function save() {
   if (TELAO_WINDOW) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { warn("Não foi possível salvar no navegador (armazenamento cheio ou bloqueado). Exporte um backup em Configurações."); }
@@ -2008,7 +2009,8 @@ function startUI() {
     // Mantém o telão em tela cheia (na mesma janela) atualizado a cada ação
     const _render = render;
     render = function () { _render(); refreshTelaoFull(); };
-    window.addEventListener("storage", e => { if (e.key === KEY) { state = load(); render(); } });
+    // outra aba salvou: pega os dados, mas continua na tela em que este operador está
+    window.addEventListener("storage", e => { if (e.key === KEY) { const v = state.view; state = load(); state.view = v; render(); } });
   }
   updateNetPill();
   render();
