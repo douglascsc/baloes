@@ -72,8 +72,8 @@ function arenaPage(round, last) {
 
 /* ======================= CONFRONTO DIRETO (retrato, 1 página por confronto) ======================= */
 const MATCHES = [
-  // até 14 confrontos preliminares (7 equipes × 4 jogos); com 2 jogos por equipe, use só os 7 primeiros
-  ...Array.from({ length: 14 }, (_, i) => ["Fase preliminar", `Confronto ${i + 1}`]),
+  // até 21 confrontos preliminares (7 equipes: 7, 14 ou 21 conforme a configuração); use só os necessários
+  ...Array.from({ length: 21 }, (_, i) => ["Fase preliminar", `Confronto ${i + 1}`]),
   ["Semifinal", "Semifinal 1 · 1º colocado × 4º colocado"], ["Semifinal", "Semifinal 2 · 2º colocado × 3º colocado"],
   ["Final", "Final · vencedor SF1 × vencedor SF2"], ["", "Confronto nº ____ (reserva / repetição)"]
 ];

@@ -66,11 +66,26 @@ const INITIAL_TEAMS = [
   { id: "robotech-pastor2", number: null, name: "RoboTech Pastor2", school: "EMEB Pastor Rodolfo Saenger", robot: "RoboTech Pastor2", members: "Artur Traichel Hendges · Pyetro Augusto Siebert Wiedemann · Leonardo Bergmann Garcia Oliveira · Gabriel da Silva Gulart", professor: "Eliana Kuhn Blaszczekievicz" }
 ];
 
+// Cronograma padrão (editável na aba Cronograma). **texto** aparece em negrito.
+const DEFAULT_SCHEDULE = [
+  ["08:00", "09:30", "Credenciamento e Treino Livre", "Credenciamento das equipes, identificação dos participantes, montagem e testes dos robôs e treino livre na arena."],
+  ["09:30", "10:00", "Abertura Oficial", "Boas-vindas, apresentação da modalidade, orientações gerais e início oficial da competição."],
+  ["10:00", "10:15", "Reunião Técnica e Sorteio", "Apresentação das regras, critérios de pontuação e orientações de segurança. Sorteio da numeração das equipes, definição das cores e esclarecimento de dúvidas."],
+  ["10:15", "10:30", "Preparação para a Etapa 1", "Organização das equipes, conferência dos robôs, identificação das equipes e preparação da arena."],
+  ["10:30", "11:30", "Etapa 1 — Arena Livre", "Cada equipe terá **até 30 segundos** para estourar o maior número possível de balões das demais equipes, conforme as regras da modalidade."],
+  ["11:30", "13:30", "Intervalo para Almoço", "Pausa para almoço e descanso das equipes e organização da arena."],
+  ["13:30", "14:00", "Preparação para a Etapa 2", "Organização das equipes classificadas, conferência dos robôs, definição dos confrontos e preparação da arena."],
+  ["14:00", "16:00", "Etapa 2 — Confronto Direto", "Confrontos entre duas equipes. Cada partida será disputada em **2 rounds**, com intervalo de até **2 minutos** entre eles."],
+  ["16:00", "17:00", "Apuração e Premiação", "Conferência dos resultados, definição da classificação final e entrega das premiações às equipes."],
+  ["17:00", "17:30", "Encerramento", "Agradecimentos, registro final e encerramento oficial da competição."]
+];
+
 /* ============================ ESTADO ============================ */
 function uid() {
   try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* segue */ }
   return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
 }
+function defaultSchedule() { return DEFAULT_SCHEDULE.map(([start, end, title, detail]) => ({ id: uid(), start, end, title, detail })); }
 function defaultColors() { return DEFAULT_COLORS.map(([name, hex], i) => ({ id: uid(), number: i + 1, name, hex })); }
 function defaultSettings() {
   return {
@@ -138,7 +153,7 @@ function normalize(raw) {
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
   st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30);
   st.winPts = clampI(st.winPts, 0, 10, 3); st.drawPts = clampI(st.drawPts, 0, 10, 1); st.lossPts = clampI(st.lossPts, 0, 10, 0);
-  st.cupGames = Number(st.cupGames) === 4 ? 4 : 2;
+  st.cupGames = [2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 2;
   st.sound = st.sound !== false; st.soundTv = !!st.soundTv; st.autoBackup = st.autoBackup !== false;
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
@@ -182,9 +197,13 @@ function normalize(raw) {
     s.cup.liveId = null;
     s.cup.matches.forEach(m => { if (m.status === "live") m.status = "pending"; });
   }
+  const hhmm = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(str(v)) ? str(v) : "";
+  s.schedule = (Array.isArray(s.schedule) ? s.schedule : defaultSchedule()).filter(x => x && typeof x === "object")
+    .map(x => ({ id: str(x.id) || uid(), start: hhmm(x.start), end: hhmm(x.end), title: str(x.title) || "Atividade", detail: str(x.detail) }))
+    .sort((a, b) => (a.start || "99").localeCompare(b.start || "99") || (a.end || "").localeCompare(b.end || ""));
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
-  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
-  s.view = ["inicio", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
+  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
+  s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
   return s;
 }
 function normRepeats(list) { return (Array.isArray(list) ? list : []).filter(x => x && typeof x === "object").map(x => ({ at: str(x.at), reason: str(x.reason) || "não informado", round: Math.round(num(x.round, 0)) || undefined })); }
@@ -331,7 +350,7 @@ function render() {
   if (TELAO_WINDOW) { renderTelaoWindow(); return; }
   const v = state.view;
   document.querySelectorAll(".nav-btn").forEach(b => { b.classList.toggle("active", b.dataset.view === v); if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
-  ({ inicio, equipes, cores, arena, confrontos, geral, telao, config })[v]();
+  ({ inicio, crono, equipes, cores, arena, confrontos, geral, telao, config })[v]();
   document.querySelectorAll("#main thead th").forEach(th => th.setAttribute("scope", "col"));
   updateTvPill();
   updateTimers();
@@ -358,7 +377,7 @@ function inicio() {
       ${stat("Confronto Direto", cs.total ? `${cs.done}/${cs.total}` : "—", "⚔️", cs.total ? cs.stageText : "fase preliminar não gerada")}
     </div>
     <div class="grid g2 mt">
-      <div class="card"><h2>Agora</h2>${now}</div>
+      <div class="card"><h2>Agora</h2>${now}${(() => { const a = currentActivity(), nx = nextActivity(); return a || nx ? `<div class="sch-now mt-s" onclick="nav('crono')" role="button" tabindex="0">🗓️ ${a ? `<b>${hFmt(a.start)} às ${hFmt(a.end)} · ${esc(a.title)}</b>` : "Nenhuma atividade agora"}${nx ? `<span class="muted small">A seguir: ${hFmt(nx.start)} · ${esc(nx.title)}</span>` : ""}</div>` : ""; })()}</div>
       <div class="card"><h2>Próximos</h2>
         <div class="next-list">
           <div><span class="tag arena">ARENA LIVRE</span> ${nf ? `<b>${esc(teamName(nf.teamId))}</b> · Rodada ${nf.round}` : `<span class="muted">${fs.total ? "Concluída ✓" : "Cadastre equipes"}</span>`}</div>
@@ -383,6 +402,58 @@ function inicio() {
     </div>`;
 }
 function stat(label, value, icon, sub) { return `<div class="card stat"><div class="icon">${icon}</div><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`; }
+
+/* ============================ TELA: CRONOGRAMA ============================ */
+// "08:00" -> "8h" · "09:30" -> "9h30"
+function hFmt(v) { if (!v) return "—"; const [h, m] = v.split(":").map(Number); return `${h}h${m ? pad2(m) : ""}`; }
+const rich = t => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+const nowHHMM = () => { const d = new Date(Date.now() + (TELAO_WINDOW && NET.on ? NET.offset : 0)); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+function scheduleStatus(x, now = nowHHMM()) { if (!x.start || !x.end) return ""; return now >= x.end ? "past" : now >= x.start ? "now" : "future"; }
+function currentActivity() { const n = nowHHMM(); return state.schedule.find(x => scheduleStatus(x, n) === "now") || null; }
+function nextActivity() { const n = nowHHMM(); return state.schedule.find(x => x.start && x.start > n) || null; }
+function crono() {
+  const cur = currentActivity();
+  const rows = state.schedule.map(x => { const st = scheduleStatus(x); return `<tr class="st-${st}">
+      <td class="sch-time"><b>${hFmt(x.start)} às ${hFmt(x.end)}</b>${st === "now" ? `<span class="chip live">● agora</span>` : ""}</td>
+      <td><b>${esc(x.title)}</b></td><td class="sch-detail">${rich(x.detail)}</td>
+      <td class="sch-act"><button class="btn tiny" onclick="scheduleForm('${esc(x.id)}')" aria-label="Editar ${esc(x.title)}">✏️ Editar</button><button class="btn tiny danger" onclick="deleteActivity('${esc(x.id)}')" aria-label="Excluir ${esc(x.title)}">🗑</button></td></tr>`; }).join("");
+  main().innerHTML = head("Cronograma", `${state.schedule.length} atividades · ${state.schedule.length ? `${hFmt(state.schedule[0].start)} às ${hFmt(state.schedule[state.schedule.length - 1].end)}` : ""}${cur ? ` · agora: <b>${esc(cur.title)}</b>` : ""}`,
+    `<button class="btn" onclick="setDisplay('crono');openTelaoWindow()">📺 Mostrar no telão</button><button class="btn primary" onclick="scheduleForm()">+ Nova atividade</button>`) +
+    `<div class="card"><div class="table-wrap"><table class="table sched" aria-label="Cronograma"><thead><tr><th>Horário</th><th>Atividade</th><th>Detalhamento</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="4">Nenhuma atividade. Clique em <b>+ Nova atividade</b>.</td></tr>`}</tbody></table></div>
+    <p class="muted small mt-s">As atividades ficam em ordem de horário. A atividade em andamento é destacada pelo relógio deste computador. Para negrito no detalhamento, use **texto**.</p>
+    <div class="actions mt-s"><button class="btn small ghost" onclick="restoreSchedule()">↻ Restaurar cronograma padrão</button></div></div>`;
+}
+function scheduleForm(id) {
+  const x = id ? state.schedule.find(a => a.id === id) : null;
+  const last = state.schedule[state.schedule.length - 1];
+  openModal(`<h2>${x ? "Editar atividade" : "Nova atividade"}</h2><form id="schF"><div class="form-grid">
+      <div><label>Início *</label><input name="start" type="time" required value="${esc(x ? x.start : last?.end || "08:00")}"></div>
+      <div><label>Fim *</label><input name="end" type="time" required value="${esc(x?.end || "")}"></div>
+      <div class="full"><label>Atividade *</label><input name="title" required maxlength="80" value="${esc(x?.title)}" placeholder="Ex.: Etapa 1 — Arena Livre"></div>
+      <div class="full"><label>Detalhamento</label><textarea name="detail" rows="4" maxlength="600" placeholder="Descrição da atividade (use **texto** para negrito)">${esc(x?.detail)}</textarea></div>
+    </div><div class="actions mt"><button class="btn primary big">Salvar</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
+  document.getElementById("schF").onsubmit = e => {
+    e.preventDefault(); const f = new FormData(e.target), F = e.target; fieldErr(F);
+    const data = { start: str(f.get("start")), end: str(f.get("end")), title: str(f.get("title")), detail: str(f.get("detail")) };
+    if (!data.start) return fieldErr(F, "start", "Informe o horário de início.");
+    if (!data.end) return fieldErr(F, "end", "Informe o horário de fim.");
+    if (data.end <= data.start) return fieldErr(F, "end", "O fim precisa ser depois do início.");
+    if (!data.title) return fieldErr(F, "title", "Informe o nome da atividade.");
+    logEv(x ? `Cronograma: atividade editada — ${hFmt(data.start)} às ${hFmt(data.end)} ${data.title}${x.title !== data.title || x.start !== data.start || x.end !== data.end ? ` (antes: ${hFmt(x.start)} às ${hFmt(x.end)} ${x.title})` : ""}` : `Cronograma: atividade incluída — ${hFmt(data.start)} às ${hFmt(data.end)} ${data.title}`);
+    if (x) Object.assign(x, data); else state.schedule.push({ id: uid(), ...data });
+    state = normalize(state); save(); closeModal(); toast(x ? "Atividade atualizada" : "Atividade incluída"); render();
+  };
+}
+function deleteActivity(id) {
+  const x = state.schedule.find(a => a.id === id); if (!x) return;
+  if (!confirm(`Excluir a atividade "${x.title}" (${hFmt(x.start)} às ${hFmt(x.end)})?`)) return;
+  state.schedule = state.schedule.filter(a => a.id !== id); logEv(`Cronograma: atividade excluída — ${hFmt(x.start)} às ${hFmt(x.end)} ${x.title}`);
+  save(); toast("Atividade excluída"); render();
+}
+function restoreSchedule() {
+  if (!confirm("Substituir o cronograma atual pelo cronograma padrão?")) return;
+  state.schedule = defaultSchedule(); logEv("Cronograma restaurado para o padrão"); save(); toast("Cronograma restaurado"); render();
+}
 
 /* ============================ TELA: EQUIPES ============================ */
 function equipes() {
@@ -786,7 +857,8 @@ function cupSummary() {
    repetir confrontos (cada equipe enfrenta as vizinhas na numeração do sorteio,
    a 1 e a 2 posições de distância), ordenado para que nenhuma equipe jogue
    dois confrontos seguidos e os jogos de cada equipe fiquem espaçados. */
-const gamesPerTeam = n => (cfg().cupGames === 4 && n >= 5) ? 4 : 2;
+// 2, 4 ou 6 jogos por equipe (N, 2N ou 3N confrontos). Cada equipe precisa ter adversárias suficientes: k ≤ N − 1.
+const gamesPerTeam = n => { let k = cfg().cupGames; while (k > 2 && k > n - 1) k -= 2; return k; };
 function buildPrelimPairs(ids, k = 2) {
   const n = ids.length, edges = [];
   for (let d = 1; d <= k / 2; d++) for (let i = 0; i < n; i++) edges.push([ids[i], ids[(i + d) % n]]);
@@ -844,7 +916,7 @@ function generatePrelim() {
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
   const k = gamesPerTeam(list.length);
-  if (cfg().cupGames === 4 && k !== 4) warn("Com menos de 5 equipes não é possível cada uma jogar 4 vezes sem repetir. Gerando com 2 jogos por equipe.");
+  if (k !== cfg().cupGames) warn(`Com ${list.length} equipes não é possível cada uma jogar ${cfg().cupGames} vezes sem repetir adversário. Gerando com ${k} jogos por equipe.`);
   const pairs = buildPrelimPairs(list.map(t => t.id), k);
   state.cup = { matches: pairs.map((p, i) => emptyMatch("prelim", i + 1, p[0], p[1])), liveId: null, manualOrder: [] };
   logEv(`Fase preliminar gerada: ${pairs.length} confrontos, ${k} por equipe (${pairs.map(p => `${teamName(p[0])} × ${teamName(p[1])}`).join("; ")})`);
@@ -1260,6 +1332,10 @@ function geral() {
     </tbody></table></div>
     <p class="muted small mt-s">Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre. Persistindo, decisão da comissão. O campeão do Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
 }
+function sceneCrono() {
+  const n = nowHHMM();
+  return `<div class="tv tv-rank tv-crono"><div class="tv-mode">🗓️ CRONOGRAMA · ROBÔ ESTOURA BALÃO</div><div class="tv-table">${state.schedule.map(x => { const st = scheduleStatus(x, n); return `<div class="tv-row st-${st} ${st === "now" ? "top" : ""}"><span class="p tv-h">${hFmt(x.start)}–${hFmt(x.end)}</span><span class="n">${esc(x.title)}</span><b>${st === "now" ? "● AGORA" : ""}</b></div>`; }).join("")}</div></div>`;
+}
 function sceneGeral() {
   if (!state.display.reveal) return tvHidden("🏆 CLASSIFICAÇÃO GERAL");
   const rk = generalRanking();
@@ -1273,6 +1349,7 @@ function telaoScene() {
   if (d.mode === "cup") return sceneCupRank();
   if (d.mode === "bracket") return sceneBracket();
   if (d.mode === "geral") return sceneGeral();
+  if (d.mode === "crono") return sceneCrono();
   if (cur) return sceneFree(cur);
   if (live) return sceneMatch(live);
   const champ = champion();
@@ -1338,7 +1415,7 @@ function telao() {
   const opt = (v, l) => `<button class="btn ${d.mode === v ? "primary" : ""}" onclick="setDisplay('${v}')">${l}</button>`;
   main().innerHTML = head("Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
     `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
-    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("geral", "🏆 Classificação Geral")}</div>
+    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
     ${netCard()}
     <div class="tv-preview mt"><div class="tv-frame">${telaoScene()}</div></div>`;
@@ -1352,7 +1429,7 @@ function netCard() {
 // Topo: deixa sempre visível o que o público está vendo no telão
 function updateTvPill() {
   const el = document.getElementById("tvPill"); if (!el) return;
-  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral" }[state.display.mode];
+  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral", crono: "cronograma" }[state.display.mode];
   el.innerHTML = `📺 Telão: ${mode} · ${state.display.reveal ? "<b>pontuação VISÍVEL</b>" : "pontuação oculta"}`;
   el.classList.toggle("on", !!state.display.reveal);
 }
@@ -1502,6 +1579,7 @@ function resultSheets() {
       ...allMatches.filter(m => m.status === "done").flatMap(m => [1, 2].flatMap(r => m.rounds[r].events.map(e => { const t = findTeam(e.side === "a" ? m.a : m.b); return [stageName(m), matchName(m), r, e.t, t?.name || "", schoolText(t), e.label, e.pts]; })))] },
     { name: "Classificação Geral", rows: [["Posição", "Nº", "Equipe", "Escola", "Arena Livre", "Confronto Direto (pontos marcados)", "Total"],
       ...gr.map((r, i) => [i + 1, noLabel(r.team), r.team.name, schoolText(r.team), r.arena, r.cup, r.total])] },
+    { name: "Cronograma", rows: [["Início", "Fim", "Horário", "Atividade", "Detalhamento"], ...state.schedule.map(x => [x.start, x.end, `${hFmt(x.start)} às ${hFmt(x.end)}`, x.title, x.detail.replace(/\*\*/g, "")])] },
     { name: "Histórico", rows: [["Data e hora", "Registro"], ...state.log.map(x => [fmtDate(x.at), x.msg])] }
   ];
 }
@@ -1554,8 +1632,8 @@ function config() {
         <div><label>Adversário saiu da arena (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupExit}" onchange="setSetting('cupExit',this.value)"></div>
         <div><label>Classificação: vitória / empate / derrota</label><div class="tri"><input type="number" min="0" max="10" value="${s.winPts}" onchange="setSetting('winPts',this.value)" aria-label="Pontos por vitória"><input type="number" min="0" max="10" value="${s.drawPts}" onchange="setSetting('drawPts',this.value)" aria-label="Pontos por empate"><input type="number" min="0" max="10" value="${s.lossPts}" onchange="setSetting('lossPts',this.value)" aria-label="Pontos por derrota"></div></div>
         <div class="full"><label>Fase preliminar</label><select onchange="setSetting('cupGames',this.value)">
-          <option value="2" ${s.cupGames === 2 ? "selected" : ""}>2 jogos por equipe · ${teams().length} confrontos</option>
-          <option value="4" ${s.cupGames === 4 ? "selected" : ""} ${teams().length < 5 ? "disabled" : ""}>4 jogos por equipe · ${teams().length * 2} confrontos</option></select>
+          ${[2, 4, 6].map(k => `<option value="${k}" ${s.cupGames === k ? "selected" : ""} ${k > teams().length - 1 && k > 2 ? "disabled" : ""}>${teams().length * k / 2} confrontos · ${k} jogos por equipe${k === teams().length - 1 ? " (todos contra todos)" : ""}${k > teams().length - 1 && k > 2 ? " — indisponível com " + teams().length + " equipes" : ""}</option>`).join("")}</select>
+          <p class="muted small">Calculado com as ${teams().length} equipes cadastradas.</p>
           ${prelims().length ? `<p class="muted small">A fase preliminar atual tem ${prelims().length} confrontos. A mudança vale ao gerar a fase preliminar novamente.</p>` : ""}</div>
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
       </div><p class="muted small mt-s">Padrão: 2 jogos por equipe · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
@@ -1759,5 +1837,7 @@ function startUI() {
   updateNetPill();
   render();
 }
+let lastMinute = "";
+setInterval(() => { const m = nowHHMM(); if (m !== lastMinute) { const first = !lastMinute; lastMinute = m; if (!first && (state.view === "crono" || state.view === "inicio" || TELAO_WINDOW)) render(); } }, 5000);
 ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { getAudio(); document.getElementById("soundHint")?.classList.add("hidden"); }, { once: true }));
 detectServer().finally(startUI);

@@ -16,6 +16,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
 | **Classificação Geral** | Soma da Arena Livre com os pontos marcados no Confronto Direto (todas as fases, ou só a preliminar, em Configurações). |
+| **Cronograma** | Programação do dia: incluir, editar e excluir atividades (horário, atividade e detalhamento). A atividade em andamento é destacada pelo relógio, aparece no Início e pode ser exibida no telão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
 | **Config.** | Rodadas e tempo da Arena Livre, critérios de desempate, **planilha Excel**, backup (JSON) e reinício. |
 
@@ -35,7 +36,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
-- **Jogos por equipe na preliminar (Configurações):** **2** (7 equipes → 7 confrontos) ou **4** (7 equipes → 14 confrontos), sempre sem repetir adversário.
+- **Jogos por equipe na preliminar (Configurações):** **2**, **4** ou **6**, ou seja, N, 2N ou 3N confrontos conforme o número de equipes inscritas. Com 7 equipes, são **7, 14 ou 21** confrontos (21 = todos contra todos). Nunca há adversário repetido; se o número de equipes não permitir, o sistema avisa e usa o maior possível.
 - **Fase preliminar:** funciona com qualquer número de equipes (mínimo 4). N equipes geram N confrontos: 6 → 6, 7 → 7, 8 → 8, 10 → 10. Cada equipe joga exatamente 2 vezes, sem repetir confrontos e sem jogar duas vezes seguidas. A exceção é com 4 equipes, em que isso é matematicamente impossível; o sistema avisa. Os 4 primeiros vão às semifinais.
 - Confronto: Round 1 (2 min) → intervalo (2 min, automático) → Round 2 (1 min) → conferência do resultado.
 - +100 por balão adversário · +30 quando o adversário sai da arena.
@@ -89,7 +90,7 @@ Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica
 ## Configurações de regras
 Em **Config.**, dá para ajustar, sem mexer no código:
 - **Arena Livre:** rodadas (1 a 5), tempo por tentativa e pontos (+ outra cor, − própria cor, − saída).
-- **Confronto Direto:** jogos por equipe (2 ou 4), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
+- **Confronto Direto:** jogos por equipe (2, 4 ou 6), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
 
 Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
 
@@ -102,7 +103,7 @@ Cada marcação guarda os pontos do momento: mudar a regra não altera o que já
 - **Histórico de alterações:** sorteios, resultados, correções, anulações, repetições, ajustes de tempo e mudanças de configuração, com data e hora. Fica em Config. e na aba "Histórico" da planilha.
 
 ## Súmulas para imprimir (pasta `sumulas/`)
-- `Sumula-Confronto-Direto.docx`: uma página por confronto (Preliminar 1 a 14, Semifinais 1 e 2, Final e uma reserva). Com 2 jogos por equipe, use só as 7 primeiras preliminares.
+- `Sumula-Confronto-Direto.docx`: uma página por confronto (Preliminar 1 a 21, Semifinais 1 e 2, Final e uma reserva). Imprima só as preliminares necessárias: 7, 14 ou 21.
 - `Sumula-Arena-Livre.docx`: uma página por rodada (1 a 5), já com as 7 equipes e escolas.
 
 Para regerar (ex.: mudou alguma equipe): `npm install docx` e depois `node sumulas/gerar-sumulas.js`.
