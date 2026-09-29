@@ -54,8 +54,10 @@ def persist():
 
 
 def lan_ips():
+    """Enderecos deste PC na rede local. Os 169.254.x.x (cabo de rede direto
+    entre dois PCs, sem roteador) aparecem por ultimo."""
     ips = set()
-    for target in ("8.8.8.8", "192.168.0.1", "10.0.0.1"):
+    for target in ("8.8.8.8", "192.168.0.1", "10.0.0.1", "169.254.255.255"):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect((target, 80))
@@ -68,7 +70,12 @@ def lan_ips():
             ips.add(ip)
     except OSError:
         pass
-    return sorted(ip for ip in ips if not ip.startswith("127.") and not ip.startswith("169.254."))
+    ips = [ip for ip in ips if not ip.startswith("127.") and not ip.startswith("0.")]
+    return sorted(ips, key=lambda ip: (ip.startswith("169.254."), ip))
+
+
+def is_direct(ip):
+    return ip.startswith("169.254.")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -162,7 +169,8 @@ def main():
     print("  NO PC DO TELAO, abra no navegador:")
     if ips:
         for ip in ips:
-            print(f"      http://{ip}:{port}/")
+            nota = "   (cabo de rede direto entre os PCs)" if is_direct(ip) else ""
+            print(f"      http://{ip}:{port}/{nota}")
     else:
         print("      (nenhuma rede encontrada - conecte este PC ao Wi-Fi/cabo)")
     print()

@@ -70,7 +70,7 @@ Não precisa de internet nem de banco de dados: os dois PCs só precisam estar n
 - Só o PC que registra consegue alterar os dados. O cronômetro do telão é sincronizado com o do PC de registro.
 - Cópia automática a cada alteração: `dados-competicao.json`, na pasta do sistema.
 - Se a rede cair, o registro continua normalmente. O telão mostra um aviso e volta sozinho quando a conexão retornar.
-- Rede da escola bloqueando a comunicação entre computadores? Use o roteador do celular ou um cabo de rede direto entre os dois PCs.
+- Rede da escola bloqueando a comunicação entre computadores? Use o roteador do celular ou um cabo de rede direto entre os dois PCs. Com cabo direto, o endereço mostrado é do tipo `http://169.254.x.x:8000` e aparece marcado como "cabo de rede direto". Pode levar cerca de 1 minuto depois de ligar o cabo para ele aparecer; se não aparecer, feche e abra o `.bat` de novo.
 - No Mac ou Linux, use `python3 servidor.py` no lugar do `.bat`.
 
 ## Planilha de resultados (Excel)
