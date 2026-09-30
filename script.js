@@ -316,9 +316,15 @@ function getAudio() {
   } catch (e) { return null; }
 }
 function tone(freq, dur, vol = 0.09) {
-  const c = getAudio(); if (!c || c.state !== "running") return;
-  const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = freq;
-  o.connect(g); g.connect(c.destination); g.gain.value = vol; o.start(); o.stop(c.currentTime + dur);
+  const c = getAudio(); if (!c) return;
+  const play = () => {
+    const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = freq;
+    o.connect(g); g.connect(c.destination); g.gain.value = vol; o.start(); o.stop(c.currentTime + dur);
+  };
+  if (c.state === "running") return play();
+  // áudio ainda "acordando" (1º som depois de abrir a página): toca assim que liberar, se for logo em seguida
+  const asked = Date.now();
+  c.resume().then(() => { if (c.state === "running" && Date.now() - asked < 1500) play(); }).catch(() => {});
 }
 function beep(kind = "end") {
   if (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound) return;
@@ -332,7 +338,7 @@ function countdownBeep(t, kind = "free", phase = "") {
   if (kind === "cup" && phase === "break" && !s.cupBeepBreak) return;
   const L = left(t);
   // bipe de início: logo após iniciar a tentativa/round do zero (não ao retomar uma pausa); intervalo não tem
-  if (s[kind + "BeepStart"] && phase !== "break" && t.remaining >= t.duration - 0.01 && t.duration - L < 1.5) {
+  if (s[kind + "BeepStart"] && phase !== "break" && t.remaining >= t.duration - 0.01 && t.duration - L < 3) {
     const k = `start:${Math.round((t.endsAt - t.duration * 1000) / 1000)}`; if (!beeped.has(k)) { beeped.add(k); beep("start"); }
   }
   if (s[kind + "BeepMid"]) String(s[kind + "BeepMidAt"]).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
@@ -1878,7 +1884,7 @@ function config() {
           <label class="check"><input type="checkbox" ${s[k + "BeepEnd"] ? "checked" : ""} onchange="setSetting('${k}BeepEnd',this.checked)"> Bipe final (longo) quando o tempo acabar</label>
           ${k === "cup" ? `<label class="check"><input type="checkbox" ${s.cupBeepBreak ? "checked" : ""} onchange="setSetting('cupBeepBreak',this.checked)"> Bipar também no intervalo entre os rounds</label>` : ""}
         </div>`).join("")}
-        <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
+        <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('start'),60)">🔈 Testar bipe de início</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
         <hr class="sep">
         <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label></div>
       <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
