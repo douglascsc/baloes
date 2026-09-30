@@ -376,12 +376,13 @@ const sortedTeams = () => [...state.teams].sort(byNum);
 const findTeam = id => state.teams.find(t => t.id === id) || null;
 const teamName = (id, fb = "A definir") => findTeam(id)?.name || fb;
 const schoolText = t => t && t.school ? t.school : "Escola não informada";
+const numIn = t => t?.number ? pad2(t.number) : ""; // número do sorteio dentro do círculo da cor
 const teamNo = t => t?.number ? `Equipe ${pad2(t.number)}` : "Equipe XX";
 const noLabel = t => t?.number ? pad2(t.number) : "XX";
 const sortedColors = () => [...state.colors].sort((a, b) => a.number - b.number);
 function colorChip(c, big = false) {
   if (!c) return `<span class="muted">Sem cor</span>`;
-  return `<span class="cchip ${big ? "big" : ""}" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}"><i>${esc(c.number)}</i><span>${esc(c.name)}</span></span>`;
+  return `<span class="cchip ${big ? "big" : ""}" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}"><i></i><span>${esc(c.name)}</span></span>`;
 }
 function teamCell(t, extra = "") {
   return `<div class="tcell"><b>${esc(t?.name || "A definir")}</b><small>${esc(t ? schoolText(t) : "")}</small>${extra}</div>`;
@@ -578,11 +579,11 @@ function shuffle(a) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const
 /* ============================ TELA: CORES ============================ */
 function cores() {
   const rows = sortedColors().map(c => `<div class="card color-card">
-      <div class="swatch" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</div>
-      <div class="color-info"><b>Cor ${esc(c.number)}</b><span>${esc(c.name)}</span></div>
+      <div class="swatch" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}"></div>
+      <div class="color-info"><b>${esc(c.name)}</b></div>
       <div class="actions"><button class="btn small" onclick="colorForm('${esc(c.id)}')">✏️ Editar</button><button class="btn small danger" onclick="deleteColor('${esc(c.id)}')">🗑</button></div>
     </div>`).join("");
-  main().innerHTML = head("Cores dos balões", "Numeradas de 1 a 8 (até 8 cores). Na Arena Livre, a cor de cada equipe é sorteada entre estas.",
+  main().innerHTML = head("Cores dos balões", "Até 8 cores. Na Arena Livre, a cor de cada equipe é sorteada entre estas.",
     `<button class="btn primary" onclick="colorForm()" ${state.colors.length >= 8 ? "disabled" : ""}>+ Nova cor</button>`) +
     `<div class="grid g4">${rows || `<div class="empty span-all">Nenhuma cor cadastrada. A Arena Livre precisa de pelo menos uma cor.</div>`}</div>
      <div class="actions mt"><button class="btn small" onclick="restoreColors()">↻ Restaurar as ${DEFAULT_COLORS.length} cores padrão</button></div>
@@ -593,20 +594,19 @@ function colorForm(id) {
   if (!c && state.colors.length >= 8) return warn("Limite de 8 cores atingido.");
   const used = new Set(state.colors.map(x => x.number)), next = [1, 2, 3, 4, 5, 6, 7, 8].find(n => !used.has(n)) || 8;
   openModal(`<h2>${c ? "Editar cor" : "Nova cor"}</h2><form id="colorF"><div class="form-grid">
-      <div><label>Número *</label><input name="number" type="number" min="1" max="8" required value="${c ? c.number : next}"></div>
       <div><label>Nome *</label><input name="name" required maxlength="30" value="${esc(c?.name)}" placeholder="Ex.: Vermelho"></div>
       <div><label>Cor</label><input name="hex" type="color" value="${esc(c?.hex || "#e53935")}"></div>
     </div><div class="actions mt"><button class="btn primary big">Salvar</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   document.getElementById("colorF").onsubmit = e => {
     e.preventDefault(); const f = new FormData(e.target);
-    const data = { number: Math.min(8, Math.max(1, Math.round(num(f.get("number"), next)))), name: str(f.get("name")), hex: str(f.get("hex")) || "#9e9e9e" };
+    const data = { number: c ? c.number : next, name: str(f.get("name")), hex: str(f.get("hex")) || "#9e9e9e" };
     const F = e.target; fieldErr(F);
     if (!data.name) return fieldErr(F, "name", "Informe o nome da cor.");
-    if (state.colors.some(x => x !== c && x.number === data.number)) return fieldErr(F, "number", `O número ${data.number} já está em uso (${state.colors.find(x => x !== c && x.number === data.number).name}).`);
-    logEv(c ? `Cor editada: ${c.number} ${c.name} → ${data.number} ${data.name}` : `Cor incluída: ${data.number} ${data.name}`);
+    if (state.colors.some(x => x !== c && x.name.toLowerCase() === data.name.toLowerCase())) return fieldErr(F, "name", `Já existe a cor ${data.name}.`);
+    logEv(c ? `Cor editada: ${c.name} → ${data.name}` : `Cor incluída: ${data.name}`);
     if (c) {
       Object.assign(c, data);
-      // equipes com esta cor sorteada passam a mostrar o nome/número/tom novos (tentativas já registradas não mudam)
+      // equipes com esta cor sorteada passam a mostrar o nome/tom novos (tentativas já registradas não mudam)
       Object.keys(state.free.draws).forEach(tid => { if (state.free.draws[tid]?.id === c.id) state.free.draws[tid] = snap(c); });
       if (state.free.current?.color?.id === c.id && state.free.current.timer.status === "idle") state.free.current.color = snap(c);
     } else state.colors.push({ id: uid(), ...data });
@@ -616,8 +616,8 @@ function colorForm(id) {
 function deleteColor(id) {
   const c = state.colors.find(x => x.id === id); if (!c) return;
   const inUse = teams().filter(t => drawOf(t.id)?.id === id).map(t => t.name);
-  if (!confirm(`Excluir a cor ${c.number} (${c.name})?\nResultados já registrados não mudam.${inUse.length ? `\n\nEsta cor está sorteada para: ${inUse.join(", ")}. Elas continuam com ela até um novo sorteio ou troca manual.` : ""}`)) return;
-  logEv(`Cor excluída: ${c.number} ${c.name}`);
+  if (!confirm(`Excluir a cor ${c.name}?\nResultados já registrados não mudam.${inUse.length ? `\n\nEsta cor está sorteada para: ${inUse.join(", ")}. Elas continuam com ela até um novo sorteio ou troca manual.` : ""}`)) return;
+  logEv(`Cor excluída: ${c.name}`);
   state.colors = state.colors.filter(x => x.id !== id); save(); toast("Cor excluída"); render();
 }
 function restoreColors() {
@@ -663,7 +663,7 @@ function drawColors() {
   while (pool.length < teams().length) pool = pool.concat(shuffle(state.colors));
   state.free.draws = {};
   sortedTeams().forEach((t, i) => { state.free.draws[t.id] = snap(pool[i]); });
-  logEv(`Cores sorteadas: ${sortedTeams().map(t => `${t.name} = ${state.free.draws[t.id].number} ${state.free.draws[t.id].name}`).join(", ")}`);
+  logEv(`Cores sorteadas: ${sortedTeams().map(t => `${t.name} = ${state.free.draws[t.id].name}`).join(", ")}`);
   save(); toast(teams().length > state.colors.length ? `Cores sorteadas (${state.colors.length} cores para ${teams().length} equipes: algumas se repetem)` : "Cores sorteadas — valem para todas as rodadas"); render();
 }
 function drawMissing() {
@@ -676,13 +676,13 @@ function drawMissing() {
 function setDrawColor(teamId, colorId) {
   const c = state.colors.find(x => x.id === colorId); if (!c) return;
   const other = teams().find(t => t.id !== teamId && drawOf(t.id)?.id === c.id);
-  if (other && !confirm(`A cor ${c.number} (${c.name}) já é de ${other.name}. Usar mesmo assim?`)) return render();
-  state.free.draws[teamId] = snap(c); logEv(`Cor de ${teamName(teamId)} alterada para ${c.number} ${c.name}`); save(); toast("Cor alterada"); render();
+  if (other && !confirm(`A cor ${c.name} já é de ${other.name}. Usar mesmo assim?`)) return render();
+  state.free.draws[teamId] = snap(c); logEv(`Cor de ${teamName(teamId)} alterada para ${c.name}`); save(); toast("Cor alterada"); render();
 }
 function teamColorsCard(inArena = false) {
   const has = teams().some(t => drawOf(t.id)), missing = has && !allDrawn();
   if (inArena && !has) return "";
-  const rows = sortedTeams().map(t => { const c = drawOf(t.id); return `<div class="q-row">${c ? `<span class="q-color" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</span>` : `<span class="q-color none">?</span>`}${teamCell(t)}${c ? `<select class="mini-select" onchange="setDrawColor('${esc(t.id)}',this.value)" aria-label="Cor de ${esc(t.name)}">${sortedColors().map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? "selected" : ""}>${esc(x.number)} · ${esc(x.name)}</option>`).join("")}</select>` : `<span class="chip wait">sem cor</span>`}</div>`; }).join("");
+  const rows = sortedTeams().map(t => { const c = drawOf(t.id); return `<div class="q-row">${c ? `<span class="q-color" title="Cor ${esc(c.name)}" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="q-color none" title="Cor não sorteada">${numIn(t) || "?"}</span>`}${teamCell(t)}${c ? `<select class="mini-select" onchange="setDrawColor('${esc(t.id)}',this.value)" aria-label="Cor de ${esc(t.name)}">${sortedColors().map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<span class="chip wait">sem cor</span>`}</div>`; }).join("");
   return `<div class="card"><div class="card-head"><h2>🎨 Cores das equipes (Arena Livre)</h2>
     ${has ? `<button class="btn small ghost" onclick="drawColors()">↻ Sortear de novo</button>` : ""}</div>
     <p class="muted small">Sorteio único antes de chamar as equipes. A cor vale para todas as rodadas.</p>
@@ -700,7 +700,7 @@ function callTeam(teamId, round) {
   const cr = currentFreeRound();
   if (round > cr && !confirm(`A Rodada ${cr} ainda não terminou.\nChamar ${teamName(teamId)} para a Rodada ${round} mesmo assim?`)) return;
   state.free.current = { id: uid(), teamId, round, color, events: [], repeats: [], timer: newTimer(state.settings.freeSeconds) };
-  logEv(`Arena Livre: ${teamName(teamId)} chamada para a Rodada ${round} (cor ${color.number} · ${color.name})`);
+  logEv(`Arena Livre: ${teamName(teamId)} chamada para a Rodada ${round} (cor ${color.name})`);
   save(); render();
 }
 function callNext() { const n = nextFree(); if (!n) return warn("Todas as tentativas já foram realizadas."); callTeam(n.teamId, n.round); }
@@ -864,7 +864,7 @@ function freeQueueCard() {
         if (!cur && drawOf(x.teamId)) act = `<button class="btn tiny" onclick="callTeam('${esc(x.teamId)}',${r})">Chamar</button>`;
       }
       const dc = x.attempt ? x.attempt.color : x.current ? state.free.current.color : drawOf(x.teamId);
-      return `<div class="q-row ${x.current ? "is-live" : ""}">${dc ? `<span class="q-color" title="Cor ${esc(dc.number)} · ${esc(dc.name)}" style="--c:${esc(dc.hex)};--t:${textOn(dc.hex)}">${esc(dc.number)}</span>` : `<span class="q-color none" title="Cor não sorteada">?</span>`}${teamCell(t)}${chip}${act}</div>`;
+      return `<div class="q-row ${x.current ? "is-live" : ""}">${dc ? `<span class="q-color" title="Cor ${esc(dc.name)}" style="--c:${esc(dc.hex)};--t:${textOn(dc.hex)}">${numIn(t)}</span>` : `<span class="q-color none" title="Cor não sorteada">${numIn(t) || "?"}</span>`}${teamCell(t)}${chip}${act}</div>`;
     }).join("");
     html += `<details class="q-round" ${r === cr ? "open" : ""}><summary><b>Rodada ${r}</b><span class="muted">${done}/${items.length}</span></summary>${rows || `<div class="muted small">Sem equipes.</div>`}</details>`;
   }
@@ -1452,7 +1452,7 @@ function telaoScene() {
   const nf = nextFree(), nm = nextMatch();
   return `<div class="tv tv-idle"><img src="assets/robosapiens.png" alt="RoboSapiens" class="tv-logo"><div class="tv-title">Robô Estoura Balão</div>
     <div class="tv-next">${nm && prelims().some(m => m.status !== "pending") || (nm && !nf) ? `<span>PRÓXIMO CONFRONTO</span><b>${esc(teamName(nm.a))} × ${esc(teamName(nm.b))}</b><small>${esc(matchLabel(nm))}</small>`
-      : nf ? `<span>PRÓXIMA NA ARENA LIVRE · RODADA ${nf.round}</span><b>${esc(teamName(nf.teamId))}</b><small>${esc(schoolText(findTeam(nf.teamId)))}</small>${drawOf(nf.teamId) ? `<small>${colorChip(drawOf(nf.teamId))}</small>` : ""}` : `<span>AGUARDE</span><b>Em instantes</b>`}</div>${nf && teams().some(t => drawOf(t.id)) && !(nm && prelims().some(m => m.status !== "pending")) ? `<div class="tv-colors">${sortedTeams().map(t => { const c = drawOf(t.id); return c ? `<div class="tv-ci ${nf.teamId === t.id ? "next" : ""}"><span class="tv-dot" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${esc(c.number)}</span><b>${esc(t.name)}</b><small>${esc(c.name)}</small></div>` : ""; }).join("")}</div>` : ""}</div>`;
+      : nf ? `<span>PRÓXIMA NA ARENA LIVRE · RODADA ${nf.round}</span><b>${esc(teamName(nf.teamId))}</b><small>${esc(schoolText(findTeam(nf.teamId)))}</small>${drawOf(nf.teamId) ? `<small>${colorChip(drawOf(nf.teamId))}</small>` : ""}` : `<span>AGUARDE</span><b>Em instantes</b>`}</div>${nf && teams().some(t => drawOf(t.id)) && !(nm && prelims().some(m => m.status !== "pending")) ? `<div class="tv-colors">${sortedTeams().map(t => { const c = drawOf(t.id); return c ? `<div class="tv-ci ${nf.teamId === t.id ? "next" : ""}"><span class="tv-dot" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span><b>${esc(t.name)}</b><small>${esc(c.name)}</small></div>` : ""; }).join("")}</div>` : ""}</div>`;
 }
 function sceneFree(cur) {
   const t = findTeam(cur.teamId), total = attemptTotal(cur), tm = cur.timer;
@@ -1461,7 +1461,7 @@ function sceneFree(cur) {
     <div class="tv-mode arena">🎈 ARENA LIVRE · RODADA ${cur.round} DE ${state.settings.freeRounds}</div>
     <div class="tv-team">${esc(t.name)}</div><div class="tv-school">${esc(schoolText(t))}</div>
     <div class="tv-grid">
-      <div class="tv-color"><div class="tv-balloon" style="--c:${esc(cur.color?.hex || "#999")};--t:${textOn(cur.color?.hex || "#999")}">${esc(cur.color?.number ?? "")}</div><span>COR DA EQUIPE</span><b>${esc(cur.color?.name || "")}</b></div>
+      <div class="tv-color"><div class="tv-balloon" style="--c:${esc(cur.color?.hex || "#999")};--t:${textOn(cur.color?.hex || "#999")}">${numIn(findTeam(cur.teamId))}</div><span>COR DA EQUIPE</span><b>${esc(cur.color?.name || "")}</b></div>
       <div class="tv-timer ${tm.status}" data-timer="free">${fmt(left(tm))}</div>
       <div class="tv-score"><span>PONTOS</span><b class="${total < 0 ? "minus" : ""}">${signed(total)}</b></div>
     </div>
@@ -1662,8 +1662,8 @@ function resultSheets() {
       ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
     { name: "Arena - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", ...Array.from({ length: R }, (_, i) => `Rodada ${i + 1}`), "Tentativas", "Soma", "Melhor rodada", state.settings.freeRankMode === "melhor" ? "Pontuação (melhor rodada)" : "Pontuação (soma)"],
       ...fr.map((x, i) => [i + 1, noLabel(x.team), x.team.name, schoolText(x.team), ...x.scores.map(v => v === null ? "" : v), x.done, x.sum, x.done ? x.best : "", x.total])] },
-    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor (nº)", "Cor", "Balões de outra cor", "Balões da própria cor", "Saídas da arena", "Pontos", "Repetições (falha técnica)", "Registrado em"],
-      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.number ?? "", a.color?.name ?? "", countL(a, "Balão de outra cor"), countL(a, "Balão da própria cor"), countL(a, "Saiu da arena"), attemptTotal(a), (a.repeats || []).map(x => `${fmtDate(x.at)}: ${x.reason}`).join(" | "), fmtDate(a.at)]; })] },
+    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor", "Balões de outra cor", "Balões da própria cor", "Saídas da arena", "Pontos", "Repetições (falha técnica)", "Registrado em"],
+      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.name ?? "", countL(a, "Balão de outra cor"), countL(a, "Balão da própria cor"), countL(a, "Saiu da arena"), attemptTotal(a), (a.repeats || []).map(x => `${fmtDate(x.at)}: ${x.reason}`).join(" | "), fmtDate(a.at)]; })] },
     { name: "Arena - Marcações", rows: [["Rodada", "Equipe", "Escola", "Tempo", "Evento", "Pontos"],
       ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).flatMap(a => { const t = findTeam(a.teamId); return a.events.map(e => [a.round, t?.name || "Equipe removida", schoolText(t), e.t, e.label, e.pts]); })] },
     { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Situação", "Repetições (falha técnica)"],
@@ -1748,11 +1748,11 @@ function buildDocx(body, landscape, footerText) {
 function sumulaArena() {
   const s = cfg(), W = [700, 2500, 2700, 1300, 1450, 1450, 1450, 1250, 2190]; // A4 paisagem, soma 14990
   const H = (txt, i, size = 18) => dCell(txt, W[i], { bold: true, fill: DX.light, align: i === 1 || i === 2 ? undefined : "center", size });
-  const head = dRow([H("Ordem", 0), H("Equipe", 1), H("Escola", 2), H("Cor (nº)", 3), H(["Balões de", "outra cor", `(+${s.freeOther} cada)`], 4), H(["Balões da", "própria cor", `(−${s.freeOwn} cada)`], 5), H(["Saídas da", "arena", `(−${s.freeExit} cada)`], 6), H("PONTOS", 7), H(["Falha técnica / repetição", "(motivo) · rubrica do juiz"], 8, 16)]);
+  const head = dRow([H("Ordem", 0), H("Equipe", 1), H("Escola", 2), H("Cor", 3), H(["Balões de", "outra cor", `(+${s.freeOther} cada)`], 4), H(["Balões da", "própria cor", `(−${s.freeOwn} cada)`], 5), H(["Saídas da", "arena", `(−${s.freeExit} cada)`], 6), H("PONTOS", 7), H(["Falha técnica / repetição", "(motivo) · rubrica do juiz"], 8, 16)]);
   const list = sortedTeams(), blanks = list.length ? 2 : 8;
   const body = [...list.map((t, i) => {
     const c = drawOf(t.id);
-    return dRow([dCell(String(i + 1), W[0], { align: "center" }), dCell([dPara(dRun(t.name, { bold: true }), { after: 0 }), dPara(dRun(teamNo(t), { size: 16, color: DX.gray }), { after: 0 })], W[1]), dCell(t.school || "", W[2], { size: 16, color: DX.gray }), dCell(c ? `${c.number} · ${c.name}` : "", W[3], { align: "center", size: 18 }), ...[4, 5, 6, 7, 8].map(k => dCell("", W[k]))], 620);
+    return dRow([dCell(String(i + 1), W[0], { align: "center" }), dCell([dPara(dRun(t.name, { bold: true }), { after: 0 }), dPara(dRun(teamNo(t), { size: 16, color: DX.gray }), { after: 0 })], W[1]), dCell(t.school || "", W[2], { size: 16, color: DX.gray }), dCell(c ? c.name : "", W[3], { align: "center", size: 18 }), ...[4, 5, 6, 7, 8].map(k => dCell("", W[k]))], 620);
   }), ...Array.from({ length: blanks }, () => dRow(W.map(w => dCell("", w)), 620))];
   dPicId = 0;
   const pages = Array.from({ length: s.freeRounds }, (_, i) => dHeader(`SÚMULA — ARENA LIVRE · RODADA ${i + 1}`, `Arena 2,70 × 2,70 m · uma equipe por vez · tempo máximo de ${s.freeSeconds} s por tentativa · a cor da equipe vale para todas as rodadas`) +

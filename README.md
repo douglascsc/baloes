@@ -14,7 +14,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 |---|---|
 | **Início** | Situação atual, próximos da Arena Livre e do Confronto Direto, atalhos. |
 | **Equipes** | Incluir, editar e excluir equipes (nome, escola, robô, professor, integrantes). As equipes começam sem número (**Equipe XX**) até o **sorteio da numeração**. |
-| **Cores** | Cores dos balões numeradas de 1 a 8. O sistema começa com 3 (Azul, Preto, Laranja); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
+| **Cores** | Cores dos balões (até 8), sem número: o número que aparece no círculo da cor é sempre a numeração sorteada da equipe. O sistema começa com 3 (Azul, Preto, Laranja); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
 | **Classificação Geral** | Soma da Arena Livre com os pontos marcados no Confronto Direto (todas as fases, ou só a preliminar, em Configurações). |
