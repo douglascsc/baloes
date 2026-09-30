@@ -43,7 +43,8 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - Confronto: Round 1 (padrão 2 min) → intervalo (padrão 2 min, automático) → Round 2 (padrão 1 min) → conferência do resultado. Os tempos são configuráveis.
 - +100 por balão adversário · +30 quando o adversário sai da arena (configuráveis).
 - **Balões por robô** (padrão 2, configurável): valem para o confronto inteiro, **sem reposição entre os rounds**. O painel mostra quantos restam, na cor da equipe.
-- **Fim automático do confronto:** quando os balões de um robô acabam ou quando um robô sai da arena (+30 para o adversário), o confronto encerra e vai para a conferência do resultado. Se isso ocorrer no Round 1, não há Round 2. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
+- **Balões acabaram:** o confronto encerra e vai para a conferência do resultado; se for no Round 1, não há Round 2.
+- **Robô saiu da arena (5.1.2.1 c):** +30 para o adversário e **só o round** encerra. No Round 1, segue para o intervalo e o Round 2 acontece normalmente, com os balões que sobraram. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** reabre um confronto encerrado.
 - Classificação: vitória 3, empate 1, derrota 0 (configurável).
 - **Semifinais** geradas automaticamente: 1º × 4º e 2º × 3º. **Final:** vencedores das semifinais.
