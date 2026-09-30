@@ -1441,7 +1441,7 @@ function sceneCrono() {
 function sceneGeral() {
   if (!state.display.reveal) return tvHidden("🏆 CLASSIFICAÇÃO GERAL");
   const rk = generalRanking();
-  return `<div class="tv tv-rank"><div class="tv-mode gold">🏆 CLASSIFICAÇÃO GERAL</div><div class="tv-table">${rk.map((x, i) => `<div class="tv-row ${i < 3 ? "top" : ""}"><span class="p">${["🥇", "🥈", "🥉"][i] || `${i + 1}º`}</span><span class="n">${esc(x.team.name)}<small>${esc(schoolText(x.team))} · Arena ${signed(x.arena)} · Confronto ${x.cup}</small></span><b>${signed(x.total)}</b></div>`).join("")}</div></div>`;
+  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode gold">🏆 CLASSIFICAÇÃO GERAL</div><div class="tv-table">${rk.map((x, i) => `<div class="tv-row ${i < 3 ? "top" : ""}"><span class="p">${["🥇", "🥈", "🥉"][i] || `${i + 1}º`}</span><span class="n">${esc(x.team.name)}<small>${esc(schoolText(x.team))} · Arena ${signed(x.arena)} · Confronto ${x.cup}</small></span><b>${signed(x.total)}</b></div>`).join("")}</div></div>`;
 }
 
 /* ============================ TELÃO ============================ */
@@ -1491,17 +1491,19 @@ function sceneMatch(m) {
     <div class="tv-rules">${rulesCup()}</div>
   </div>`;
 }
-function tvHidden(title) { return `<div class="tv tv-rank"><div class="tv-mode">${title}</div><div class="tv-hidden">🔒<b>Resultado será revelado em instantes</b></div></div>`; }
+function tvHidden(title) { return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode">${title}</div><div class="tv-hidden">🔒<b>Resultado será revelado em instantes</b></div></div>`; }
 function sceneFreeRank() {
   if (!state.display.reveal) return tvHidden("🎈 CLASSIFICAÇÃO · ARENA LIVRE");
   const rk = freeRanking();
-  return `<div class="tv tv-rank"><div class="tv-mode arena">🎈 CLASSIFICAÇÃO · ARENA LIVRE</div><div class="tv-table">${rk.map((x, i) => `<div class="tv-row ${i < 3 ? "top" : ""}"><span class="p">${i + 1}º</span><span class="n">${esc(x.team.name)}<small>${esc(schoolText(x.team))}</small></span><b>${x.done ? signed(x.total) : "—"}</b></div>`).join("")}</div></div>`;
+  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode arena">🎈 CLASSIFICAÇÃO · ARENA LIVRE</div><div class="tv-table">${rk.map((x, i) => `<div class="tv-row ${i < 3 ? "top" : ""}"><span class="p">${i + 1}º</span><span class="n">${esc(x.team.name)}<small>${esc(schoolText(x.team))}</small></span><b>${x.done ? signed(x.total) : "—"}</b></div>`).join("")}</div></div>`;
 }
+// Classificações no telão: todas as equipes sempre cabem na tela (16:9); acima de 7, as linhas encolhem
+function tvFit() { return Math.min(1, 7 / Math.max(1, teams().length)).toFixed(3); }
 function sceneCupRank() {
   if (!state.display.reveal) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
   const rows = standings(), done = prelimDone();
   if (!rows.length) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
-  return `<div class="tv tv-rank"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${rows.map(r => `<div class="tv-row ${done && r.pos <= 4 ? "top" : ""} ${done && r.pos > 4 ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${r.P} pts</b></div>`).join("")}</div></div>`;
+  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${rows.map(r => `<div class="tv-row ${done && r.pos <= 4 ? "top" : ""} ${done && r.pos > 4 ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${r.P} pts</b></div>`).join("")}</div></div>`;
 }
 function sceneBracket() {
   const [s1, s2] = semis(), f = finalMatch(), champ = champion(), rv = state.display.reveal;

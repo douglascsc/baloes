@@ -439,3 +439,11 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .balloons .bl{display:inline-block;width:22px;height:27px;border-radius:50% 50% 48% 48%/55% 55% 45% 45%;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.55),transparent 32%),var(--c);border:1.5px solid rgba(0,0,0,.18);position:relative}
 .balloons .bl::after{content:"";position:absolute;left:50%;bottom:-6px;width:1px;height:6px;background:#8a948e}
 .balloons .bl.lost{opacity:.18;filter:grayscale(1)}
+/* Classificações no telão: 7 equipes cabem em 16:9; --f encolhe as linhas quando há mais equipes */
+.tv-rank:not(.tv-crono){padding-top:2cqw;gap:1cqw}
+.tv-rank:not(.tv-crono) .tv-table{gap:calc(.55cqw * var(--f,1));margin-top:.6cqw}
+.tv-rank:not(.tv-crono) .tv-row{padding:calc(.55cqw * var(--f,1)) 2cqw}
+.tv-rank:not(.tv-crono) .tv-row .p{font-size:calc(2.7cqw * var(--f,1))}
+.tv-rank:not(.tv-crono) .tv-row .n{font-size:calc(2.5cqw * var(--f,1));line-height:1.15}
+.tv-rank:not(.tv-crono) .tv-row .n small{font-size:calc(1.3cqw * var(--f,1))}
+.tv-rank:not(.tv-crono) .tv-row b{font-size:calc(3cqw * var(--f,1))}
