@@ -1572,7 +1572,7 @@ function renderTelaoWindow() {
   document.body.classList.add("telao-window");
   const box = document.getElementById("tvFull"); box.classList.remove("hidden");
   if (!document.getElementById("tvScene")) {
-    box.innerHTML = `<div id="tvScene"></div><div id="tvPops" aria-hidden="true"></div><div class="tv-hint">Duplo clique = tela cheia</div><button id="soundHint" class="tv-sound hidden" onclick="getAudio();this.classList.add('hidden')">🔈 Clique aqui para ativar o som do telão</button><div id="netWarn" class="net-warn hidden">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
+    box.innerHTML = `<div id="tvScene"></div><div id="tvPops" aria-hidden="true"></div><div class="tv-hint">Duplo clique ou F11 = tela cheia</div><button id="soundHint" class="tv-sound hidden" onclick="getAudio();this.classList.add('hidden')">🔈 Clique aqui para ativar o som do telão</button><div id="netWarn" class="net-warn hidden">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
   }
   document.getElementById("tvScene").innerHTML = telaoScene();
   document.getElementById("netWarn").classList.toggle("hidden", !(NET.on && !NET.ok));
@@ -2057,6 +2057,9 @@ function spaceTarget(e) {
 }
 function startUI() {
   if (TELAO_WINDOW) {
+    // O Chrome/Edge tira da tela cheia uma janela aberta por outra quando se clica na janela que a abriu.
+    // Cortar esse vínculo mantém o telão em tela cheia enquanto o operador usa o sistema (a sincronização não depende dele).
+    try { if (window.opener) window.opener = null; } catch (e) { /* segue */ }
     window.addEventListener("storage", e => { if (e.key === KEY && !NET.on) { state = load(); render(); } });
     document.addEventListener("dblclick", () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
     if (NET.on) pollState();
