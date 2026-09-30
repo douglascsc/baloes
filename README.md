@@ -88,7 +88,7 @@ Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Ma
 Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica fixo e com filtro.
 
 ## Operação (atalhos e avisos)
-- **Telão na TV (mesmo PC):** clique em 📺, arraste a janela do telão para a TV e dê duplo clique (ou **F11**) para tela cheia. O telão continua em tela cheia enquanto você opera o sistema na outra tela. Se algum navegador ainda sair da tela cheia, use **F11** na janela do telão (tela cheia do próprio navegador).
+- **Telão na TV (mesmo PC):** clique em 📺, arraste a janela do telão para a TV e clique no botão **⛶ Tela cheia** (ou duplo clique / **F11**). O telão continua em tela cheia enquanto você opera o sistema na outra tela. Se algum navegador ainda sair da tela cheia, use **F11** na janela do telão (tela cheia do próprio navegador).
 - **Barra de espaço:** inicia e pausa o cronômetro da Arena Livre ou do round em andamento.
 - **Topo da tela:** o indicador **📺 Telão** mostra o que o público está vendo e se a pontuação está visível.
 - **Ações recusadas** (por exemplo, marcar pontos antes de iniciar) aparecem em destaque no topo, sem cobrir os botões.

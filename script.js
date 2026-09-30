@@ -1568,11 +1568,14 @@ function exitTelao() {
   document.body.classList.remove("telao-full"); document.getElementById("tvFull").classList.add("hidden");
   if (document.fullscreenElement) document.exitFullscreen?.();
 }
+// Botão do telão: entra em tela cheia (some enquanto estiver em tela cheia)
+function tvFullscreen() { document.documentElement.requestFullscreen?.().catch(() => warn("O navegador não permitiu a tela cheia. Use F11.")); }
+function updateFsBtn() { document.getElementById("fsBtn")?.classList.toggle("hidden", !!document.fullscreenElement); }
 function renderTelaoWindow() {
   document.body.classList.add("telao-window");
   const box = document.getElementById("tvFull"); box.classList.remove("hidden");
   if (!document.getElementById("tvScene")) {
-    box.innerHTML = `<div id="tvScene"></div><div id="tvPops" aria-hidden="true"></div><div class="tv-hint">Duplo clique ou F11 = tela cheia</div><button id="soundHint" class="tv-sound hidden" onclick="getAudio();this.classList.add('hidden')">🔈 Clique aqui para ativar o som do telão</button><div id="netWarn" class="net-warn hidden">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
+    box.innerHTML = `<div id="tvScene"></div><div id="tvPops" aria-hidden="true"></div><div class="tv-hint">Duplo clique ou F11 = tela cheia</div><button id="fsBtn" class="tv-fs" onclick="tvFullscreen()">⛶ Tela cheia</button><button id="soundHint" class="tv-sound hidden" onclick="getAudio();this.classList.add('hidden')">🔈 Clique aqui para ativar o som do telão</button><div id="netWarn" class="net-warn hidden">⚠ Sem conexão com o PC de registro — tentando novamente…</div>`;
   }
   document.getElementById("tvScene").innerHTML = telaoScene();
   document.getElementById("netWarn").classList.toggle("hidden", !(NET.on && !NET.ok));
@@ -2061,7 +2064,8 @@ function startUI() {
     // Cortar esse vínculo mantém o telão em tela cheia enquanto o operador usa o sistema (a sincronização não depende dele).
     try { if (window.opener) window.opener = null; } catch (e) { /* segue */ }
     window.addEventListener("storage", e => { if (e.key === KEY && !NET.on) { state = load(); render(); } });
-    document.addEventListener("dblclick", () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+    document.addEventListener("dblclick", e => { if (e.target.closest?.("#fsBtn")) return; if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+    document.addEventListener("fullscreenchange", updateFsBtn);
     if (NET.on) pollState();
   } else {
     document.querySelectorAll(".nav-btn").forEach(b => b.onclick = () => nav(b.dataset.view));

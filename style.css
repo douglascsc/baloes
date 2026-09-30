@@ -447,3 +447,7 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .tv-rank:not(.tv-crono) .tv-row .n{font-size:calc(2.5cqw * var(--f,1));line-height:1.15}
 .tv-rank:not(.tv-crono) .tv-row .n small{font-size:calc(1.3cqw * var(--f,1))}
 .tv-rank:not(.tv-crono) .tv-row b{font-size:calc(3cqw * var(--f,1))}
+/* Botão de tela cheia na janela do telão */
+.tv-fs{position:fixed;right:18px;bottom:34px;z-index:5;border:0;border-radius:14px;padding:14px 22px;font-size:20px;font-weight:900;background:#159447;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer}
+.tv-fs:hover{filter:brightness(1.08)}
+.tv-fs.hidden{display:none}
