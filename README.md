@@ -46,12 +46,12 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - **Balões acabaram:** o confronto encerra e vai para a conferência do resultado; se for no Round 1, não há Round 2.
 - **Robô saiu da arena (5.1.2.1 c):** +30 para o adversário e **só o round** encerra. No Round 1, segue para o intervalo e o Round 2 acontece normalmente, com os balões que sobraram. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** reabre um confronto encerrado.
-- Classificação: vitória 3, empate 1, derrota 0 (configurável).
+- **Classificação da fase preliminar: pelo saldo de pontos** (pontos marcados − sofridos). Os pontos de classificação (vitória 3, empate 1, derrota 0, configuráveis) servem só como desempate.
 - **Semifinais** geradas automaticamente: 1º × 4º e 2º × 3º. **Final:** vencedores das semifinais.
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)
-Configurável em **Configurações** (ordem e ativação). Padrão definido pela organização: **1. saldo de pontos → 2. confronto direto → 3. pontos marcados**. Vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
+O critério principal é sempre o **saldo de pontos**. Desempate configurável em **Configurações** (ordem e ativação). Padrão: **1. pontos (vitória/empate/derrota) → 2. confronto direto → 3. pontos marcados**. Vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
 Se o empate persistir entre os 4 primeiros, a classificação mostra ▲▼ para a Comissão definir a ordem antes de gerar as semifinais.
 **Confira e ajuste os critérios conforme o regulamento oficial.**
 

@@ -43,6 +43,7 @@ function rulesCupTime() { const s = cfg(); return `Round 1 até ${durTxt(s.cupR1
 function durTxt(sec) { sec = Math.round(num(sec)); const m = Math.floor(sec / 60), r = sec % 60; return m && r ? `${m} min ${r} s` : m ? `${m} min` : `${r} s`; }
 
 const TIEBREAKS = {
+  pontos: { label: "Pontos (vitória/empate/derrota)", desc: "Pontos de classificação somados nos confrontos" },
   direto: { label: "Confronto direto", desc: "Pontos nos jogos entre as equipes empatadas" },
   saldo: { label: "Saldo de pontos", desc: "Pontos marcados − pontos sofridos nos confrontos" },
   pro: { label: "Pontos marcados", desc: "Total de pontos marcados nos confrontos" },
@@ -103,8 +104,9 @@ function defaultSettings() {
     freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "10, 5", freeBeepEnd: true,
     cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10, 5", cupBeepEnd: true, cupBeepBreak: false,
     // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
-    tiebreak: [{ key: "saldo", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
-      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 4
+    // Classificação pelo SALDO de pontos; desempate definido pela organização: pontos (V/E/D) → confronto direto → pontos marcados
+    tiebreak: [{ key: "pontos", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
+      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 5
   };
 }
 function fresh(teamsList) {
@@ -182,12 +184,16 @@ function normalize(raw) {
   const secs = v => [...new Set(String(v ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10).join(", ");
   ["free", "cup"].forEach(p => { st[p + "BeepStart"] = st[p + "BeepStart"] !== false; st[p + "BeepMid"] = st[p + "BeepMid"] !== false; st[p + "BeepEnd"] = st[p + "BeepEnd"] !== false; st[p + "BeepMidAt"] = secs(st[p + "BeepMidAt"]); });
   st.cupBeepBreak = !!st.cupBeepBreak;
-  const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
-  Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
+  const rawTb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
+  const rawKey = rawTb.map(x => x.key + (x.on ? 1 : 0)).join();
+  // o saldo passou a ser o critério principal: sai da lista de desempate
+  const tb = rawTb.filter(x => x.key !== "saldo");
+  if (!tb.some(x => x.key === "pontos")) tb.unshift({ key: "pontos", on: true });
+  Object.keys(TIEBREAKS).forEach(k => { if (k !== "saldo" && !tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
   // Quem ainda usa uma ordem padrão anterior (não personalizada) passa para a atual
-  const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0"];
-  if (!(s.settings && s.settings.tbV === 4)) { if (OLD_TBS.includes(st.tiebreak.map(x => x.key + (x.on ? 1 : 0)).join())) st.tiebreak = defaultSettings().tiebreak; st.tbV = 4; }
+  const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0", "saldo1,direto1,pro1,vitorias0,arena0,sorteio0"];
+  if (!(s.settings && num(s.settings.tbV, 0) >= 5)) { if (OLD_TBS.includes(rawKey)) st.tiebreak = defaultSettings().tiebreak; st.tbV = 5; }
   s.settings = st;
   const ids = new Set(s.teams.map(t => t.id));
   const f = s.free && typeof s.free === "object" ? s.free : {};
@@ -1011,6 +1017,7 @@ function critValue(key, s, group) {
     });
     return p;
   }
+  if (key === "pontos") return s.P;
   if (key === "saldo") return s.SG;
   if (key === "pro") return s.PM;
   if (key === "vitorias") return s.V;
@@ -1031,9 +1038,10 @@ function splitBy(group, crits) {
 function standings() {
   const stats = prelimStats();
   const crits = state.settings.tiebreak.filter(x => x.on).map(x => x.key);
-  const byPts = [...stats].sort((a, b) => b.P - a.P);
+  // critério principal: saldo de pontos (marcados − sofridos); os demais só desempatam
+  const bySG = [...stats].sort((a, b) => b.SG - a.SG);
   const groups = [];
-  byPts.forEach(s => { const g = groups[groups.length - 1]; if (g && g[0].P === s.P) g.push(s); else groups.push([s]); });
+  bySG.forEach(s => { const g = groups[groups.length - 1]; if (g && g[0].SG === s.SG) g.push(s); else groups.push([s]); });
   const mo = state.cup.manualOrder, rows = [];
   groups.flatMap(g => splitBy(g, crits)).forEach(part => {
     let list = [...part.list].sort((a, b) => byNum(a.team, b.team)), tied = part.tied, manual = false;
@@ -1378,14 +1386,14 @@ function standingsCard() {
     const arrows = reveal && done && r.tied ? `<span class="tie-arrows"><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',-1)" title="Subir">▲</button><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',1)" title="Descer">▼</button></span>` : "";
     const tag = reveal && done && r.tied ? `<span class="chip warn">empate</span>` : reveal && r.manual ? `<span class="chip">decisão da comissão</span>` : "";
     return `<tr class="${cls}">${reveal ? `<td class="pos">${r.pos}º</td>` : ""}<td>${teamCell(r.team, `<div class="row-tags">${teamStatus(r.team.id, rows)}${tag}${arrows}</div>`)}</td>
-      <td class="num">${r.J}</td><td class="num">${hide(r.V)}</td><td class="num">${hide(r.E)}</td><td class="num">${hide(r.D)}</td><td class="num hide-sm">${hide(r.SG > 0 ? "+" + r.SG : r.SG)}</td><td class="num total">${hide(r.P)}</td></tr>`;
+      <td class="num">${r.J}</td><td class="num">${hide(r.V)}</td><td class="num">${hide(r.E)}</td><td class="num">${hide(r.D)}</td><td class="num">${hide(r.P)}</td><td class="num total">${hide(r.SG > 0 ? "+" + r.SG : r.SG)}</td></tr>`;
   }).join("");
   const blocking = done && !semis().length && blockingTie(rows);
   return `<div class="card"><div class="card-head"><h2>Classificação · fase preliminar</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Resultados ocultos — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
-    <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num hide-sm">Saldo</th><th class="num">Pts</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num">Pts</th><th class="num">Saldo</th></tr></thead><tbody>${body}</tbody></table></div>
     ${blocking ? `<div class="notice warn mt-s"><b>Empate não resolvido entre os 4 primeiros.</b> ${reveal ? `Ajuste a ordem com ▲▼ conforme a decisão da Comissão Organizadora e confirme:` : "Revele a pontuação (👁️) para resolver."} ${reveal ? `<div class="mt-s"><button class="btn primary" onclick="confirmTieOrder()">✓ Confirmar ordem e gerar semifinais</button></div>` : ""}</div>` : ""}
-    <p class="muted small mt-s">Vitória ${cfg().winPts} · Empate ${cfg().drawPts} · Derrota ${cfg().lossPts}. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
+    <p class="muted small mt-s"><b>Classificação pelo saldo de pontos</b> (marcados − sofridos). Pts: vitória ${cfg().winPts} · empate ${cfg().drawPts} · derrota ${cfg().lossPts}. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
 }
 function bracketCard() {
@@ -1503,7 +1511,7 @@ function sceneCupRank() {
   if (!state.display.reveal) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
   const rows = standings(), done = prelimDone();
   if (!rows.length) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
-  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${rows.map(r => `<div class="tv-row ${done && r.pos <= 4 ? "top" : ""} ${done && r.pos > 4 ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${r.P} pts</b></div>`).join("")}</div></div>`;
+  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${rows.map(r => `<div class="tv-row ${done && r.pos <= 4 ? "top" : ""} ${done && r.pos > 4 ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D · ${r.P} pts</small></span><b>${signed(r.SG)}</b></div>`).join("")}</div></div>`;
 }
 function sceneBracket() {
   const [s1, s2] = semis(), f = finalMatch(), champ = champion(), rv = state.display.reveal;
@@ -1663,7 +1671,7 @@ function resultSheets() {
       ["Arena Livre — critério da classificação", state.settings.freeRankMode === "melhor" ? "Melhor rodada" : "Soma das rodadas"],
       ["Arena Livre — 1º lugar", fs.done ? fr[0]?.team.name || "" : "A definir"],
       ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
-      ["Confronto Direto — pontuação", `Vitória ${cfg().winPts} · Empate ${cfg().drawPts} · Derrota ${cfg().lossPts} · ${rulesCup()} · ${rulesCupTime()}`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — desempate", `${crits} → decisão da comissão`],
+      ["Confronto Direto — pontuação", `Vitória ${cfg().winPts} · Empate ${cfg().drawPts} · Derrota ${cfg().lossPts} · ${rulesCup()} · ${rulesCupTime()}`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — classificação", `Saldo de pontos; desempate: ${crits} → decisão da comissão`],
       ["Campeão (Confronto Direto)", champ ? champ.name : "A definir"], ["Vice-campeão (Confronto Direto)", vice ? vice.name : "A definir"],
       ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"})`],
       ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
