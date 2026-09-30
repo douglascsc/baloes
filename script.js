@@ -1104,32 +1104,32 @@ function endRound() {
   save(); render();
 }
 // Encerra o round atual (manual, tempo ou regra 5.1.2.1 b/c) e passa ao intervalo ou à conferência
-function closeRound(m, why) {
+function closeRound(m, why, endMatch = false) {
   const r = m.phase === "r1" ? 1 : 2;
-  logEv(`${matchLabel(m)} — Round ${r} encerrado${why ? ` (${why})` : ""}: ${teamName(m.a)} ${sideScore(m, "a", r)} × ${sideScore(m, "b", r)} ${teamName(m.b)}`);
-  if (r === 1) { m.phase = "break"; m.timer = newTimer(cfg().cupBreak); if (cfg().cupBreak > 0) tStart(m.timer); else m.timer.status = "over"; }
-  else { m.phase = "review"; m.timer = newTimer(0); m.timer.status = "over"; reviewRound = 2; }
+  logEv(`${matchLabel(m)} — ${endMatch && r === 1 ? "Confronto encerrado no Round 1" : `Round ${r} encerrado`}${why ? ` (${why})` : ""}: ${teamName(m.a)} ${sideScore(m, "a", r)} × ${sideScore(m, "b", r)} ${teamName(m.b)}`);
+  if (r === 1 && !endMatch) { m.phase = "break"; m.timer = newTimer(cfg().cupBreak); if (cfg().cupBreak > 0) tStart(m.timer); else m.timer.status = "over"; }
+  else { m.phase = "review"; m.timer = newTimer(0); m.timer.status = "over"; reviewRound = r; }
 }
-/* Regra 5.1.2.1: cada robô tem N balões (padrão 2) por round. O round termina sozinho
-   quando os balões de um robô acabam (b) ou quando um robô sai da arena (c). */
+/* Cada robô tem N balões (padrão 2) no confronto inteiro: não são repostos entre os rounds.
+   O confronto termina sozinho (sem Round 2, se for no Round 1) quando os balões de um
+   robô acabam ou quando um robô sai da arena. */
 const isBalloonEv = e => e.label === matchEvents()[0].label;
 const isExitEv = e => e.label === matchEvents()[1].label;
-// balões do adversário que "side" já estourou no round r
-const poppedBy = (m, side, r) => m.rounds[r].events.filter(e => e.side === side && isBalloonEv(e)).length;
+// balões do adversário que "side" já estourou (no round r, ou no confronto todo)
+const poppedBy = (m, side, r) => (r ? [r] : [1, 2]).reduce((n, k) => n + m.rounds[k].events.filter(e => e.side === side && isBalloonEv(e)).length, 0);
 function autoCloseRound(m, side, ev) {
   const r = m.phase === "r1" ? 1 : 2, loser = teamName(side === "a" ? m.b : m.a);
   const why = isExitEv(ev) ? `${loser} saiu da arena` : `os ${cfg().cupBalloons} balões de ${loser} foram estourados`;
   if (m.timer.status === "running") tPause(m.timer);
   m.autoEnd = { round: r, eventId: ev.id, remaining: left(m.timer), duration: m.timer.duration };
-  closeRound(m, why);
-  warn(`Round ${r} encerrado: ${why}. Se foi engano, use ↶ Desfazer para reabrir o round.`);
+  closeRound(m, why, true);
+  warn(`Confronto encerrado${r === 1 ? " no Round 1 (sem Round 2)" : ""}: ${why}. Se foi engano, use ↶ Desfazer para reabrir o round.`);
 }
-// Desfez/removeu a marcação que encerrou o round sozinho: volta ao round, pausado no tempo em que parou
+// Desfez/removeu a marcação que encerrou o confronto sozinho: volta ao round, pausado no tempo em que parou
 function maybeReopenRound(m, removedId) {
   const a = m.autoEnd; if (!a || a.eventId !== removedId) return false;
-  const nextPhase = a.round === 1 ? "break" : "review";
   m.autoEnd = undefined;
-  if (m.phase !== nextPhase) return false;
+  if (m.phase !== "review") return false;
   m.phase = a.round === 1 ? "r1" : "r2";
   m.timer = { status: a.remaining > 0 ? "paused" : "over", duration: a.duration, remaining: a.remaining, endsAt: 0 };
   logEv(`${matchLabel(m)} — Round ${a.round} reaberto (marcação que encerrou o round foi desfeita)`);
@@ -1159,10 +1159,10 @@ function matchEvent(side, i) {
   const live = m.phase === "r1" || m.phase === "r2";
   if (live && m.timer.status === "idle") return warn("Inicie o round antes de marcar pontos.");
   const N = cfg().cupBalloons;
-  if (i === 0 && poppedBy(m, side, r) >= N) return warn(`${teamName(side === "a" ? m.b : m.a)} só tem ${N} ${N > 1 ? "balões" : "balão"} no Round ${r}: todos já foram estourados.`);
+  if (i === 0 && poppedBy(m, side) >= N) return warn(`${teamName(side === "a" ? m.b : m.a)} só tem ${N} ${N > 1 ? "balões" : "balão"} no confronto: todos já foram estourados.`);
   const e = { id: uid(), side, pts: ev.pts, label: ev.label, t: m.phase === "review" ? "correção" : elapsed(m.timer), seq: Date.now() };
   m.rounds[r].events.push(e);
-  if (live && (isExitEv(e) || poppedBy(m, side, r) >= N)) autoCloseRound(m, side, e);
+  if (live && (isExitEv(e) || poppedBy(m, side) >= N)) autoCloseRound(m, side, e);
   save(); render();
 }
 function matchUndo(side) {
@@ -1297,7 +1297,7 @@ function livePanel(m) {
       <div class="pts">${sc}</div>
       <div class="muted small">Round 1: ${sideScore(m, side, 1)} · Round 2: ${sideScore(m, side, 2)}</div>
       ${(() => { const c = tm && drawOf(tm.id); return `<div class="f-color">${c ? `<span class="q-color" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(tm)}</span><span>Balões <b>${esc(c.name)}</b></span>` : `<span class="muted small">Cor não sorteada (Arena Livre)</span>`}</div>`; })()}
-      ${ph === "r1" || ph === "r2" ? (() => { const N = cfg().cupBalloons, lost = poppedBy(m, side === "a" ? "b" : "a", ph === "r1" ? 1 : 2), c = tm && drawOf(tm.id); return `<div class="balloons" title="Balões deste robô no round">${Array.from({ length: N }, (_, k) => c ? `<i class="bl ${k < N - lost ? "" : "lost"}" style="--c:${esc(c.hex)}"></i>` : `<span class="${k < N - lost ? "" : "lost"}">🎈</span>`).join("")}<small>${N - lost} de ${N} balões</small></div>`; })() : ""}
+      ${ph === "r1" || ph === "r2" ? (() => { const N = cfg().cupBalloons, lost = poppedBy(m, side === "a" ? "b" : "a"), c = tm && drawOf(tm.id); return `<div class="balloons" title="Balões restantes deste robô no confronto (não são repostos entre os rounds)">${Array.from({ length: N }, (_, k) => c ? `<i class="bl ${k < N - lost ? "" : "lost"}" style="--c:${esc(c.hex)}"></i>` : `<span class="${k < N - lost ? "" : "lost"}">🎈</span>`).join("")}<small>${N - lost} de ${N} balões</small></div>`; })() : ""}
       <div class="fighter-btns">${matchEvents().map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"} aria-label="${esc(e.short)} para ${esc(tm?.name)}: ${esc(e.label)}"><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
       <button class="btn undo" onclick="matchUndo('${side}')" aria-label="Desfazer a última marcação de ${esc(tm?.name)}">↶ Desfazer última</button>
     </div>`;
@@ -1839,8 +1839,8 @@ function config() {
         <div><label>Round 2 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR2}" onchange="setSetting('cupR2',this.value)"></div>
         <div><label>Balão adversário estourado (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupBalloon}" onchange="setSetting('cupBalloon',this.value)"></div>
         <div><label>Adversário saiu da arena (+ pontos)</label><input type="number" min="0" max="1000" value="${s.cupExit}" onchange="setSetting('cupExit',this.value)"></div>
-        <div><label>Balões por robô (em cada round)</label><input type="number" min="1" max="10" value="${s.cupBalloons}" onchange="setSetting('cupBalloons',this.value)"></div>
-        <div class="full"><p class="muted small">O round encerra sozinho quando os balões de um robô acabam ou quando um robô sai da arena (regulamento 5.1.2.1). Se foi engano, ↶ Desfazer reabre o round.</p></div>
+        <div><label>Balões por robô (no confronto)</label><input type="number" min="1" max="10" value="${s.cupBalloons}" onchange="setSetting('cupBalloons',this.value)"></div>
+        <div class="full"><p class="muted small">Os balões não são repostos entre os rounds. O confronto encerra sozinho (sem Round 2, se for no Round 1) quando os balões de um robô acabam ou quando um robô sai da arena. Se foi engano, ↶ Desfazer reabre o round.</p></div>
         <div><label>Classificação: vitória / empate / derrota</label><div class="tri"><input type="number" min="0" max="10" value="${s.winPts}" onchange="setSetting('winPts',this.value)" aria-label="Pontos por vitória"><input type="number" min="0" max="10" value="${s.drawPts}" onchange="setSetting('drawPts',this.value)" aria-label="Pontos por empate"><input type="number" min="0" max="10" value="${s.lossPts}" onchange="setSetting('lossPts',this.value)" aria-label="Pontos por derrota"></div></div>
         <div class="full"><label>Fase preliminar</label><select onchange="setSetting('cupGames',this.value)">
           ${(() => { const N = teams().length, all = N * (N - 1) / 2;
