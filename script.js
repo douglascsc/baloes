@@ -51,9 +51,9 @@ const TIEBREAKS = {
   sorteio: { label: "Numeração do sorteio", desc: "Menor número sorteado fica à frente" }
 };
 
-// Começa com 4 cores cadastradas; outras (até 8) podem ser incluídas na tela Cores
+// Começa com 3 cores cadastradas; outras (até 8) podem ser incluídas na tela Cores
 const DEFAULT_COLORS = [
-  ["Vermelho", "#e53935"], ["Azul", "#1e88e5"], ["Verde", "#43a047"], ["Amarelo", "#fdd835"]
+  ["Azul", "#1e88e5"], ["Preto", "#212121"], ["Laranja", "#fb8c00"]
 ];
 
 const INITIAL_TEAMS = [
@@ -151,6 +151,14 @@ function normalize(raw) {
   s.colors = (Array.isArray(s.colors) && s.colors.length ? s.colors : defaultColors())
     .filter(c => c && typeof c === "object")
     .map((c, i) => ({ id: sid(c.id) || uid(), number: Math.max(1, Math.round(num(c.number, i + 1))), name: str(c.name) || `Cor ${i + 1}`, hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? str(c.hex) : "#9e9e9e" }));
+  // Atualização única: quem ainda tem as 4 cores padrão antigas, sem nenhum sorteio nem tentativa, passa às 3 atuais
+  if (!(num(s.colorV, 0) >= 2)) {
+    const old = ["Vermelho", "Azul", "Verde", "Amarelo"], f0 = s.free || {};
+    const untouched = s.colors.length === 4 && s.colors.every((c, i) => c.name === old[i] && c.number === i + 1);
+    const unused = !Object.keys(f0.draws || {}).length && !(f0.attempts || []).length && !f0.current;
+    if (untouched && unused) s.colors = defaultColors();
+  }
+  s.colorV = 2;
   const st = { ...defaultSettings(), ...(s.settings || {}) };
   st.freeRounds = Math.min(5, Math.max(1, Math.round(num(st.freeRounds, 4))));
   st.freeSeconds = Math.min(600, Math.max(5, Math.round(num(st.freeSeconds, 30))));
@@ -576,7 +584,7 @@ function cores() {
   main().innerHTML = head("Cores dos balões", "Numeradas de 1 a 8 (até 8 cores). Na Arena Livre, a cor de cada equipe é sorteada entre estas.",
     `<button class="btn primary" onclick="colorForm()" ${state.colors.length >= 8 ? "disabled" : ""}>+ Nova cor</button>`) +
     `<div class="grid g4">${rows || `<div class="empty span-all">Nenhuma cor cadastrada. A Arena Livre precisa de pelo menos uma cor.</div>`}</div>
-     <div class="actions mt"><button class="btn small" onclick="restoreColors()">↻ Restaurar as 4 cores padrão</button></div>
+     <div class="actions mt"><button class="btn small" onclick="restoreColors()">↻ Restaurar as ${DEFAULT_COLORS.length} cores padrão</button></div>
      <div class="mt">${teamColorsCard()}</div>`;
 }
 function colorForm(id) {
@@ -612,7 +620,7 @@ function deleteColor(id) {
   state.colors = state.colors.filter(x => x.id !== id); save(); toast("Cor excluída"); render();
 }
 function restoreColors() {
-  if (!confirm("Substituir a lista atual pelas 4 cores padrão (Vermelho, Azul, Verde, Amarelo)?")) return;
+  if (!confirm(`Substituir a lista atual pelas ${DEFAULT_COLORS.length} cores padrão (${DEFAULT_COLORS.map(c => c[0]).join(", ")})?`)) return;
   state.colors = defaultColors(); logEv("Cores restauradas para o padrão"); save(); toast("Cores restauradas"); render();
 }
 
