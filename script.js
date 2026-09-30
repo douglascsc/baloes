@@ -100,8 +100,8 @@ function defaultSettings() {
     winPts: 3, drawPts: 1, lossPts: 0,
     sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
     // bipes separados por prova; no Confronto Direto o intervalo não bipa (padrão)
-    freeBeepMid: true, freeBeepMidAt: "10, 5", freeBeepEnd: true,
-    cupBeepMid: true, cupBeepMidAt: "10, 5", cupBeepEnd: true, cupBeepBreak: false,
+    freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "10, 5", freeBeepEnd: true,
+    cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10, 5", cupBeepEnd: true, cupBeepBreak: false,
     // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
     tiebreak: [{ key: "saldo", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
       { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 4
@@ -180,7 +180,7 @@ function normalize(raw) {
   delete st.beepMid; delete st.beepMidAt; delete st.beepEnd;
   // segundos dos bipes intermediários: "10, 5" (de 1 a 600, sem repetir, do maior para o menor)
   const secs = v => [...new Set(String(v ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10).join(", ");
-  ["free", "cup"].forEach(p => { st[p + "BeepMid"] = st[p + "BeepMid"] !== false; st[p + "BeepEnd"] = st[p + "BeepEnd"] !== false; st[p + "BeepMidAt"] = secs(st[p + "BeepMidAt"]); });
+  ["free", "cup"].forEach(p => { st[p + "BeepStart"] = st[p + "BeepStart"] !== false; st[p + "BeepMid"] = st[p + "BeepMid"] !== false; st[p + "BeepEnd"] = st[p + "BeepEnd"] !== false; st[p + "BeepMidAt"] = secs(st[p + "BeepMidAt"]); });
   st.cupBeepBreak = !!st.cupBeepBreak;
   const tb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   Object.keys(TIEBREAKS).forEach(k => { if (!tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
@@ -316,7 +316,7 @@ function tone(freq, dur, vol = 0.09) {
 }
 function beep(kind = "end") {
   if (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound) return;
-  if (kind === "warn") tone(660, 0.14); else { tone(880, 0.9); }
+  if (kind === "warn") tone(660, 0.14); else if (kind === "start") tone(1046, 0.45); else { tone(880, 0.9); }
 }
 const beeped = new Set();
 // kind: "free" (Arena Livre) ou "cup" (Confronto Direto); phase: fase do confronto
@@ -325,6 +325,10 @@ function countdownBeep(t, kind = "free", phase = "") {
   const s = cfg(), marks = [];
   if (kind === "cup" && phase === "break" && !s.cupBeepBreak) return;
   const L = left(t);
+  // bipe de início: logo após iniciar a tentativa/round do zero (não ao retomar uma pausa); intervalo não tem
+  if (s[kind + "BeepStart"] && phase !== "break" && t.remaining >= t.duration - 0.01 && t.duration - L < 1.5) {
+    const k = `start:${Math.round((t.endsAt - t.duration * 1000) / 1000)}`; if (!beeped.has(k)) { beeped.add(k); beep("start"); }
+  }
   if (s[kind + "BeepMid"]) String(s[kind + "BeepMidAt"]).split(/[^\d]+/).map(Number).filter(n => n > 0).forEach(n => marks.push([n, "warn"]));
   if (s[kind + "BeepEnd"]) marks.push([0, "end"]);
   marks.forEach(([th, sound]) => {
@@ -1858,6 +1862,7 @@ function config() {
         <p class="muted small">Bipes (valem para este PC e para o telão):</p>
         ${[["free", "🎈 Arena Livre"], ["cup", "⚔️ Confronto Direto (Round 1 e Round 2)"]].map(([k, title]) => `<div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}">
           <b class="beep-title">${title}</b>
+          <label class="check"><input type="checkbox" ${s[k + "BeepStart"] ? "checked" : ""} onchange="setSetting('${k}BeepStart',this.checked)"> Bipe de início quando ${k === "cup" ? "cada round começar" : "a tentativa começar"}</label>
           <label class="check"><input type="checkbox" ${s[k + "BeepMid"] ? "checked" : ""} onchange="setSetting('${k}BeepMid',this.checked)"> Bipe intermediário (curto) quando faltarem</label>
           <div class="beep-at"><input type="text" inputmode="numeric" value="${esc(s[k + "BeepMidAt"])}" onchange="setSetting('${k}BeepMidAt',this.value)" aria-label="Segundos dos bipes intermediários — ${title}" ${s[k + "BeepMid"] ? "" : "disabled"}><span class="muted small">segundos (ex.: 30, 10, 5)</span></div>
           <label class="check"><input type="checkbox" ${s[k + "BeepEnd"] ? "checked" : ""} onchange="setSetting('${k}BeepEnd',this.checked)"> Bipe final (longo) quando o tempo acabar</label>
