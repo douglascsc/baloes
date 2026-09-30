@@ -1296,7 +1296,8 @@ function livePanel(m) {
       ${teamCell(tm)}
       <div class="pts">${sc}</div>
       <div class="muted small">Round 1: ${sideScore(m, side, 1)} · Round 2: ${sideScore(m, side, 2)}</div>
-      ${ph === "r1" || ph === "r2" ? (() => { const N = cfg().cupBalloons, lost = poppedBy(m, side === "a" ? "b" : "a", ph === "r1" ? 1 : 2); return `<div class="balloons" title="Balões deste robô no round">${Array.from({ length: N }, (_, k) => `<span class="${k < N - lost ? "" : "lost"}">🎈</span>`).join("")}<small>${N - lost} de ${N} balões</small></div>`; })() : ""}
+      ${(() => { const c = tm && drawOf(tm.id); return `<div class="f-color">${c ? `<span class="q-color" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(tm)}</span><span>Balões <b>${esc(c.name)}</b></span>` : `<span class="muted small">Cor não sorteada (Arena Livre)</span>`}</div>`; })()}
+      ${ph === "r1" || ph === "r2" ? (() => { const N = cfg().cupBalloons, lost = poppedBy(m, side === "a" ? "b" : "a", ph === "r1" ? 1 : 2), c = tm && drawOf(tm.id); return `<div class="balloons" title="Balões deste robô no round">${Array.from({ length: N }, (_, k) => c ? `<i class="bl ${k < N - lost ? "" : "lost"}" style="--c:${esc(c.hex)}"></i>` : `<span class="${k < N - lost ? "" : "lost"}">🎈</span>`).join("")}<small>${N - lost} de ${N} balões</small></div>`; })() : ""}
       <div class="fighter-btns">${matchEvents().map((e, i) => `<button class="btn score ${i === 0 ? "good" : ""}" onclick="matchEvent('${side}',${i})" ${canScore ? "" : "disabled"} aria-label="${esc(e.short)} para ${esc(tm?.name)}: ${esc(e.label)}"><b>${e.short}</b><span>${e.icon} ${e.label}</span></button>`).join("")}</div>
       <button class="btn undo" onclick="matchUndo('${side}')" aria-label="Desfazer a última marcação de ${esc(tm?.name)}">↶ Desfazer última</button>
     </div>`;
