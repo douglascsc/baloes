@@ -2326,6 +2326,8 @@ function startUI() {
   }
   updateNetPill();
   // semifinais ainda não jogadas que foram geradas pela regra antiga (só a preliminar) passam a seguir a Classificação Geral
+  // semifinais já jogadas antes desta versão: cria a disputa de 3º lugar ao abrir
+  if (!TELAO_WINDOW && semis().length === 2 && semis().every(m => winnerOf(m)) && !thirdMatch()) checkProgress();
   if (!TELAO_WINDOW && semis().length && !state.cup.matches.some(x => x.stage !== "prelim" && x.status !== "pending")) { const before = semis().map(m => m.a + m.b).join(); resyncSemis(); if (semis().map(m => m.a + m.b).join() !== before) { logEv("Semifinais refeitas pela Classificação Geral"); save(); } }
   render();
 }
