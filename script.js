@@ -441,7 +441,7 @@ function inicio() {
   else if (live) now = `<div class="now-item"><span class="tag cup">CONFRONTO DIRETO</span><b>${esc(teamName(live.a))} × ${esc(teamName(live.b))}</b><span>${esc(matchLabel(live))}</span><button class="btn primary" onclick="nav('confrontos')">Abrir Confronto Direto</button></div>`;
   const nf = nextFree(), nm = nextMatch();
   main().innerHTML = head("Central da Competição", "Modalidade Robô Estoura Balão · Ensino Fundamental") +
-    (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">CAMPEÃO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
+    (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">VENCEDOR - CONFRONTO DIRETO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
     `<div class="grid g4">
       ${stat("Equipes", teams().length, "👥", "cadastradas")}
       ${stat("Cores", state.colors.length, "🎨", "de balões")}
@@ -1245,7 +1245,7 @@ function confirmResult() {
   Object.assign(m, { status: "done", winner, byDecision, phase: "review", timer: newTimer(0) }); delete m._backup;
   state.cup.liveId = null; save();
   // o aviso de fase gerada (semifinais/final/empate) vem depois e fica visível
-  toast(m.stage === "final" ? `🏆 ${teamName(winner)} é CAMPEÃO!` : "Resultado registrado");
+  toast(m.stage === "final" ? `🏆 ${teamName(winner)} é o Vencedor - Confronto Direto!` : "Resultado registrado");
   checkProgress();
   render();
   if (m.stage === "prelim" && prelimDone() && !before) autoBackup("apos-fase-preliminar", "fase preliminar concluída");
@@ -1282,7 +1282,7 @@ function confrontos() {
   const kNow = n ? Math.round(n * 2 / Math.max(1, new Set(prelims().flatMap(m => [m.a, m.b])).size)) : gamesPerTeam(teams().length);
   main().innerHTML = head("Confronto Direto", `Duas equipes por vez · arena 1,20 × 1,20 m · Fase preliminar (cada equipe joga ${kNow} vezes) → Semifinais (1º×4º, 2º×3º) → Final`,
     `<button class="btn" onclick="openTelaoWindow()">📺 Abrir telão</button>`, "cup", !!live) +
-    (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">CAMPEÃO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
+    (champ ? `<div class="champion-banner"><div class="trophy">🏆</div><div><div class="eyebrow">VENCEDOR - CONFRONTO DIRETO</div><h2>${esc(champ.name)}</h2><p>${esc(schoolText(champ))}</p></div></div>` : "") +
     (!n ? `<div class="card center stage"><h2>Fase preliminar</h2><p class="muted">${teams().length} equipes · cada equipe disputa exatamente ${kNow} confrontos, sem repetição · ${teams().length >= 4 ? `<b>${teams().length * kNow / 2} confrontos</b>` : "mínimo 4 equipes"}</p><p class="muted small">Quantidade de jogos por equipe: em <b>Configurações → Confronto Direto</b>.</p><button class="btn primary huge" onclick="generatePrelim()" ${teams().length < 4 ? "disabled" : ""}>🔀 Gerar fase preliminar</button></div>`
       : `${live ? livePanel(live) : phaseTracker() + nextPanel()}
       <div class="cup-layout mt">${prelimCard()}${standingsCard()}</div>
@@ -1378,14 +1378,14 @@ function prelimCard() {
 function teamStatus(id, rows) {
   const live = liveMatch(), nm = nextMatch(), c = champion(), f = finalMatch();
   if (live && (live.a === id || live.b === id)) return `<span class="chip live">● Jogando</span>`;
-  if (c && c.id === id) return `<span class="chip gold">🏆 Campeão</span>`;
+  if (c && c.id === id) return `<span class="chip gold">🏆 Vencedor - Confronto Direto</span>`;
   if (nm && (nm.a === id || nm.b === id)) return `<span class="chip next">Próximo</span>`;
   if (semis().length) {
     const inKo = semis().some(m => m.a === id || m.b === id);
     if (!inKo) return `<span class="chip out">Eliminado</span>`;
     const lostSemi = semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id);
     if (lostSemi) return `<span class="chip out">Semifinalista</span>`;
-    if (f && f.status === "done") return `<span class="chip done">Vice-campeão</span>`;
+    if (f && f.status === "done") return `<span class="chip done">2º lugar - Confronto Direto</span>`;
     return `<span class="chip ok">${f ? "Finalista" : "Semifinal"}</span>`;
   }
   const s = rows.find(r => r.team.id === id);
@@ -1421,7 +1421,7 @@ function bracketCard() {
     <div class="bracket">
       <div class="b-col">${box(s1, "Semifinal 1", "1º colocado", "4º colocado")}${box(s2, "Semifinal 2", "2º colocado", "3º colocado")}</div>
       <div class="b-col mid">${box(f, "FINAL", "Vencedor Semifinal 1", "Vencedor Semifinal 2")}</div>
-      <div class="b-col"><div class="b-champ ${champ ? "on" : ""}"><div class="trophy">🏆</div><div class="eyebrow">CAMPEÃO</div><b>${champ ? esc(champ.name) : "A definir"}</b>${champ ? `<small>${esc(schoolText(champ))}</small>` : ""}</div></div>
+      <div class="b-col"><div class="b-champ ${champ ? "on" : ""}"><div class="trophy">🏆</div><div class="eyebrow">VENCEDOR - CONFRONTO DIRETO</div><b>${champ ? esc(champ.name) : "A definir"}</b>${champ ? `<small>${esc(schoolText(champ))}</small>` : ""}</div></div>
     </div></div>`;
 }
 
@@ -1454,7 +1454,7 @@ function geral() {
     ${list.map((r, i) => `<tr class="${reveal && i < 3 ? "qual" : ""}">${reveal ? `<td class="pos">${i + 1}º ${medal(i)}</td>` : ""}<td>${teamCell(r.team, ties[i] ? `<div class="row-tags"><span class="chip warn">empate com a equipe acima</span></div>` : "")}</td>
       <td class="num">${hide(signed(r.arena), r.arena < 0 ? "minus" : "")}</td><td class="num">${hide(r.cup)}</td><td class="num total">${hide(signed(r.total), r.total < 0 ? "minus" : "")}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma equipe.</td></tr>`}
     </tbody></table></div>
-    <p class="muted small mt-s">Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre. Persistindo, decisão da comissão. O campeão do Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
+    <p class="muted small mt-s">Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre. Persistindo, decisão da comissão. O Vencedor - Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
 }
 function sceneCrono() {
   const n = nowHHMM();
@@ -1492,7 +1492,7 @@ function telaoScene() {
   if (cur) return sceneFree(cur);
   if (live) return sceneMatch(live);
   const champ = champion();
-  if (champ) return `<div class="tv tv-champ"><div class="tv-trophy">🏆</div><div class="tv-label">CAMPEÃO · ROBÔ ESTOURA BALÃO</div><div class="tv-team">${esc(champ.name)}</div><div class="tv-school">${esc(schoolText(champ))}</div></div>`;
+  if (champ) return `<div class="tv tv-champ"><div class="tv-trophy">🏆</div><div class="tv-label">VENCEDOR - CONFRONTO DIRETO · ROBÔ ESTOURA BALÃO</div><div class="tv-team">${esc(champ.name)}</div><div class="tv-school">${esc(schoolText(champ))}</div></div>`;
   const nf = nextFree(), nm = nextMatch();
   return `<div class="tv tv-idle"><img src="assets/robosapiens.png" alt="RoboSapiens" class="tv-logo"><div class="tv-title">Robô Estoura Balão</div>
     <div class="tv-next">${nm && prelims().some(m => m.status !== "pending") || (nm && !nf) ? `<span>PRÓXIMO CONFRONTO</span><b>${esc(teamName(nm.a))} × ${esc(teamName(nm.b))}</b><small>${esc(matchLabel(nm))}</small>`
@@ -1548,7 +1548,7 @@ function sceneBracket() {
   return `<div class="tv tv-bracket"><div class="tv-mode cup">🏅 FASE ELIMINATÓRIA</div><div class="tv-bk">
     <div class="tv-col"><div class="tv-bm"><small>SEMIFINAL 1</small>${line(s1, "a", "1º colocado")}${line(s1, "b", "4º colocado")}</div><div class="tv-bm"><small>SEMIFINAL 2</small>${line(s2, "a", "2º colocado")}${line(s2, "b", "3º colocado")}</div></div>
     <div class="tv-col"><div class="tv-bm final"><small>FINAL</small>${line(f, "a", "Vencedor SF1")}${line(f, "b", "Vencedor SF2")}</div></div>
-    <div class="tv-col"><div class="tv-bm champ"><div class="tv-trophy sm">🏆</div><small>CAMPEÃO</small><b>${champ ? esc(champ.name) : "A definir"}</b></div></div>
+    <div class="tv-col"><div class="tv-bm champ"><div class="tv-trophy sm">🏆</div><small>VENCEDOR - CONFRONTO DIRETO</small><b>${champ ? esc(champ.name) : "A definir"}</b></div></div>
   </div></div>`;
 }
 function telao() {
@@ -1692,8 +1692,8 @@ function resultSheets() {
   const crits = state.settings.tiebreak.filter(x => x.on).map(x => TIEBREAKS[x.key].label).join(" → ") || "nenhum";
   const countL = (a, label) => a.events.filter(e => e.label === label).length;
   const situation = id => {
-    if (champ && champ.id === id) return "Campeão";
-    if (vice && vice.id === id) return "Vice-campeão";
+    if (champ && champ.id === id) return "Vencedor - Confronto Direto";
+    if (vice && vice.id === id) return "2º lugar - Confronto Direto";
     if (semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id)) return "Semifinalista";
     if (semis().length) return semis().some(m => m.a === id || m.b === id) ? (f ? "Finalista" : "Semifinalista") : "Eliminado na fase preliminar";
     return done ? "" : "Em disputa";
@@ -1708,7 +1708,7 @@ function resultSheets() {
       ["Arena Livre — 1º lugar", fs.done ? fr[0]?.team.name || "" : "A definir"],
       ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
       ["Confronto Direto — pontuação", `${rulesCup()} · ${rulesCupTime()} · classificação pelo saldo de pontos`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — classificação", `Saldo de pontos; desempate: ${crits} → decisão da comissão`],
-      ["Campeão (Confronto Direto)", champ ? champ.name : "A definir"], ["Vice-campeão (Confronto Direto)", vice ? vice.name : "A definir"],
+      ["Vencedor - Confronto Direto", champ ? champ.name : "A definir"], ["2º lugar - Confronto Direto", vice ? vice.name : "A definir"],
       ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"})`],
       ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
     { name: "Equipes", rows: [["Nº", "Equipe", "Escola", "Robô", "Professor(a)", "Integrantes", "Cor Arena Livre (nº)", "Cor Arena Livre"],

@@ -17,7 +17,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 | **Equipes** | Incluir, editar e excluir equipes (nome, escola, robô, professor, integrantes). As equipes começam sem número (**Equipe XX**) até o **sorteio da numeração**. |
 | **Cores** | Cores dos balões (até 8), sem número: o número que aparece no círculo da cor é sempre a numeração sorteada da equipe. O sistema começa com 3 (Azul, Preto, Laranja); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
-| **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e campeão. |
+| **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e Vencedor - Confronto Direto. |
 | **Classificação Geral** | Soma da Arena Livre com os pontos marcados no Confronto Direto (todas as fases, ou só a preliminar, em Configurações). |
 | **Cronograma** | Programação do dia: incluir, editar e excluir atividades (horário, atividade e detalhamento). A atividade em andamento é destacada pelo relógio, aparece no Início e pode ser exibida no telão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
@@ -36,7 +36,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 ## Classificação Geral
 - **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + pontos marcados no Confronto Direto (+100 por balão, +30 por saída do adversário).
 - **Desempate:** mais pontos no Confronto Direto, depois mais pontos na Arena Livre. Persistindo, decisão da comissão.
-- O campeão do Confronto Direto continua sendo o vencedor da final. A Classificação Geral pode ser exibida no telão.
+- O Vencedor - Confronto Direto é o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
 ## Confronto Direto
 - **Fase preliminar (Configurações):** padrão **todos contra todos**: com 7 equipes são **21 confrontos** e cada equipe joga 6 vezes; com 8 equipes, 28 confrontos. Também dá para escolher 2 ou 4 jogos por equipe (7 ou 14 confrontos com 7 equipes). Nunca há adversário repetido; se o número de equipes não permitir, o sistema avisa e usa o maior possível.
