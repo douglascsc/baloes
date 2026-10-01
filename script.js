@@ -256,7 +256,7 @@ function normalize(raw) {
   }
   s.schedV = 3;
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
-  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
+  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
   s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
   return s;
 }
@@ -539,7 +539,7 @@ function equipes() {
       <div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button><button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>
     </div>`).join("");
   main().innerHTML = head("Equipes", `${teams().length} equipes cadastradas.`,
-    `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
+    `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="showOnTv('numeros')">📺 Mostrar no telão</button><button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
     (teams().length && !teams().every(t => t.number) ? `<div class="notice mb">Equipes sem numeração aparecem como <b>Equipe XX</b>. Use <b>🎲 Sortear numeração</b> antes de gerar os confrontos.</div>` : "") +
     (started ? `<div class="notice warn mb">A competição já começou. Alterar nomes é seguro; excluir equipes ou refazer o sorteio pode exigir reiniciar etapas.</div>` : "") +
     `<div class="grid g3">${cards || `<div class="empty span-all">Nenhuma equipe cadastrada. Clique em <b>+ Nova equipe</b>.</div>`}</div>`;
@@ -707,7 +707,7 @@ function teamColorsCard(inArena = false) {
   if (inArena && !has) return "";
   const rows = sortedTeams().map(t => { const c = drawOf(t.id); return `<div class="q-row">${c ? `<span class="q-color" title="Cor ${esc(c.name)}" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="q-color none" title="Cor não sorteada">${numIn(t) || "?"}</span>`}${teamCell(t)}${c ? `<select class="mini-select" onchange="setDrawColor('${esc(t.id)}',this.value)" aria-label="Cor de ${esc(t.name)}">${sortedColors().map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<span class="chip wait">sem cor</span>`}</div>`; }).join("");
   return `<div class="card"><div class="card-head"><h2>🎨 Cores das equipes (Arena Livre)</h2>
-    ${has ? `<button class="btn small ghost" onclick="drawColors()">↻ Sortear de novo</button>` : ""}</div>
+    <span class="actions"><button class="btn small ghost" onclick="showOnTv('cores')">📺 Mostrar no telão</button>${has ? `<button class="btn small ghost" onclick="drawColors()">↻ Sortear de novo</button>` : ""}</span></div>
     <p class="muted small">Sorteio único antes de chamar as equipes. A cor vale para todas as rodadas.</p>
     ${has ? "" : `<button class="btn primary big mt-s" onclick="drawColors()">🎲 Sortear cores das equipes</button>`}
     ${missing ? `<div class="notice warn mt-s">Há equipe sem cor. <button class="btn tiny" onclick="drawMissing()">Sortear para quem falta</button></div>` : ""}
@@ -723,6 +723,7 @@ function callTeam(teamId, round) {
   const cr = currentFreeRound();
   if (round > cr && !confirm(`A Rodada ${cr} ainda não terminou.\nChamar ${teamName(teamId)} para a Rodada ${round} mesmo assim?`)) return;
   state.free.current = { id: uid(), teamId, round, color, events: [], repeats: [], timer: newTimer(state.settings.freeSeconds) };
+  leaveDrawScreen();
   logEv(`Arena Livre: ${teamName(teamId)} chamada para a Rodada ${round} (cor ${color.name})`);
   save(); render();
 }
@@ -1110,6 +1111,7 @@ function startMatch(id) {
   if (liveMatch()) return warn("Já existe um confronto em andamento.");
   if (state.free.current) return warn("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
   if (m.status !== "pending") return;
+  leaveDrawScreen();
   Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] } }, winner: null, pick: null, byDecision: false });
   state.cup.liveId = m.id; logEv(`${matchLabel(m)} iniciado: ${teamName(m.a)} × ${teamName(m.b)}`); save(); nav("confrontos");
 }
@@ -1465,8 +1467,23 @@ function sceneGeral() {
 }
 
 /* ============================ TELÃO ============================ */
+// Telão dos sorteios: mostra o ANTES (Equipe XX / sem cor) e, ao sortear, atualiza na hora com o DEPOIS
+function sceneNumbers() {
+  const list = sortedTeams(), done = list.length && list.every(t => t.number);
+  return `<div class="tv tv-rank tv-draw"><div class="tv-mode">🎲 SORTEIO DA NUMERAÇÃO</div><div class="tv-draw-sub">${done ? "Resultado do sorteio" : list.some(t => t.number) ? "Sorteio em andamento…" : "Aguardando o sorteio…"}</div>
+    <div class="tv-draw-grid">${list.map(t => `<div class="tv-dc ${t.number ? "got" : ""}"><span class="tv-num">${noLabel(t)}</span><span class="n">${esc(t.name)}<small>${esc(schoolText(t))}</small></span></div>`).join("")}</div></div>`;
+}
+function sceneColors() {
+  const list = sortedTeams(), any = list.some(t => drawOf(t.id)), all = list.length && list.every(t => drawOf(t.id));
+  const groups = all ? sortedColors().map(c => ({ c, ts: list.filter(t => drawOf(t.id)?.id === c.id) })).filter(g => g.ts.length) : [];
+  return `<div class="tv tv-rank tv-draw"><div class="tv-mode arena">🎨 SORTEIO DAS CORES · ARENA LIVRE</div><div class="tv-draw-sub">${all ? "Resultado do sorteio · a cor vale para todas as rodadas" : any ? "Sorteio em andamento…" : "Aguardando o sorteio…"}</div>
+    <div class="tv-draw-grid">${list.map(t => { const c = drawOf(t.id); return `<div class="tv-dc ${c ? "got" : ""}">${c ? `<span class="tv-dot big" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="tv-dot big none">?</span>`}<span class="n">${esc(t.name)}<small>${c ? esc(c.name) : "sem cor"}</small></span></div>`; }).join("")}</div>
+    ${groups.length ? `<div class="tv-groups">${groups.map(g => `<div class="tv-group"><span class="tv-dot" style="--c:${esc(g.c.hex)};--t:${textOn(g.c.hex)}"></span><b>${esc(g.c.name)}:</b> ${g.ts.map(t => esc(t.name)).join(" · ")}</div>`).join("")}</div>` : ""}</div>`;
+}
 function telaoScene() {
   const d = state.display, cur = state.free.current, live = liveMatch();
+  if (d.mode === "numeros") return sceneNumbers();
+  if (d.mode === "cores") return sceneColors();
   if (d.mode === "arena") return sceneFreeRank();
   if (d.mode === "cup") return sceneCupRank();
   if (d.mode === "bracket") return sceneBracket();
@@ -1539,7 +1556,7 @@ function telao() {
   const opt = (v, l) => `<button class="btn ${d.mode === v ? "primary" : ""}" onclick="setDisplay('${v}')">${l}</button>`;
   main().innerHTML = head("Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
     `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
-    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}</div>
+    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("numeros", "🎲 Sorteio da numeração")}${opt("cores", "🎨 Sorteio das cores")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
     ${netCard()}
     <div class="tv-preview mt"><div class="tv-frame">${telaoScene()}</div></div>`;
@@ -1553,11 +1570,15 @@ function netCard() {
 // Topo: deixa sempre visível o que o público está vendo no telão
 function updateTvPill() {
   const el = document.getElementById("tvPill"); if (!el) return;
-  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral", crono: "cronograma" }[state.display.mode];
+  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral", crono: "cronograma", numeros: "sorteio da numeração", cores: "sorteio das cores" }[state.display.mode];
   el.innerHTML = `📺 Telão: ${mode} · ${state.display.reveal ? "<b>pontuação VISÍVEL</b>" : "pontuação oculta"}`;
   el.classList.toggle("on", !!state.display.reveal);
 }
 function setDisplay(mode) { state.display.mode = mode; save(); render(); }
+// Coloca no telão a tela do sorteio (antes de sortear já mostra as equipes; ao sortear, atualiza sozinha)
+function showOnTv(mode) { setDisplay(mode); toast(mode === "numeros" ? "Telão: sorteio da numeração" : "Telão: sorteio das cores"); }
+// Ao começar a prova, o telão sai da tela de sorteio e volta ao automático
+function leaveDrawScreen() { if (state.display.mode === "numeros" || state.display.mode === "cores") state.display.mode = "auto"; }
 function toggleTvReveal() { state.display.reveal = !state.display.reveal; save(); render(); }
 function openTelaoWindow() {
   const w = window.open(location.pathname + "#telao", "telao_estoura_baloes", "width=1280,height=720");
