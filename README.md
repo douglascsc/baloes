@@ -7,6 +7,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - `index.html`, `style.css`, `script.js`: o sistema (abre direto no navegador).
 - `assets/`: logotipos (`logo-sumula.js` é o logo usado nas súmulas em Word).
 - `servidor.py` + `iniciar-servidor.bat`: modo com dois computadores (telão em outro PC), opcional.
+- `abrir-telao.bat`: abre o telão em tela cheia na TV ligada a este PC.
 - `sumulas/`: súmulas em Word para imprimir e o gerador delas.
 
 ## Telas
@@ -88,6 +89,7 @@ Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Ma
 Os números vão como números, prontos para somar ou filtrar. O cabeçalho fica fixo e com filtro.
 
 ## Operação (atalhos e avisos)
+- **Telão na TV pelo `abrir-telao.bat` (recomendado):** com a TV conectada em modo **Estender** (Windows + P), dê dois cliques em **`abrir-telao.bat`**. Ele liga o servidor (se ainda não estiver ligado), encontra a TV e abre o telão **direto em tela cheia nela**, numa janela própria que não sai da tela cheia quando você clica no sistema. Para fechar o telão: clique nele e aperte **Alt+F4**. Precisa do Python (o mesmo do `iniciar-servidor.bat`) e do Edge ou Chrome.
 - **Telão na TV (mesmo PC):** clique em 📺, arraste a janela do telão para a TV e clique no botão **⛶ Tela cheia** (ou duplo clique / **F11**). O telão continua em tela cheia enquanto você opera o sistema na outra tela. Se algum navegador ainda sair da tela cheia, use **F11** na janela do telão (tela cheia do próprio navegador).
 - **Barra de espaço:** inicia e pausa o cronômetro da Arena Livre ou do round em andamento.
 - **Topo da tela:** o indicador **📺 Telão** mostra o que o público está vendo e se a pontuação está visível.
