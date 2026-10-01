@@ -25,7 +25,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 
 ## Arena Livre
 - **Passo 1 — Sorteio das cores:** feito uma única vez, antes de chamar as equipes. Cada equipe recebe uma cor, que vale para todas as rodadas. As cores só se repetem entre equipes quando há mais equipes que cores: com 3 cores e 7 equipes, cada cor fica com até 3 equipes. A cor pode ser ajustada manualmente, e o telão mostra o quadro equipe → cor.
-- **Passo 2 — Chamar para a arena:** uma equipe por vez, de 1 a 5 rodadas (padrão 4), 30 s por tentativa.
+- **Passo 2 — Chamar para a arena:** uma equipe por vez, de 1 a 5 rodadas (padrão 5), 30 s por tentativa.
 - **Encerrar a etapa:** ao fim de cada rodada, o sistema pergunta se continua ou **encerra a Arena Livre ali** (ex.: com 2 ou 3 rodadas). Encerrada, aparece o botão **⚔️ Ir para o Confronto Direto**. Também dá para reabrir mais rodadas.
 - **Falha técnica:** **🔁 Repetir tentativa** zera as marcações e o cronômetro, registrando o motivo. Uma tentativa já registrada pode ser **anulada** com motivo.
 - +50 por balão de outra cor · −50 por balão da própria cor · −30 por sair da arena.
@@ -52,7 +52,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)
-O critério principal é sempre o **saldo de pontos**. Desempate configurável em **Configurações** (ordem e ativação). Padrão: **1. pontos (vitória/empate/derrota) → 2. confronto direto → 3. pontos marcados**. Vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
+O critério principal é sempre o **saldo de pontos**. Desempate configurável em **Configurações** (ordem e ativação). Padrão: **1. confronto direto → 2. pontos (vitória/empate/derrota) → decisão da comissão**. Pontos marcados, vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
 Se o empate persistir entre os 4 primeiros, a classificação mostra ▲▼ para a Comissão definir a ordem antes de gerar as semifinais.
 **Confira e ajuste os critérios conforme o regulamento oficial.**
 
@@ -100,11 +100,15 @@ Em **Config.**, dá para ajustar, sem mexer no código:
 - **Arena Livre:** rodadas (1 a 5), tempo por tentativa e pontos (+ outra cor, − própria cor, − saída).
 - **Confronto Direto:** fase preliminar (todos contra todos, 2 ou 4 jogos por equipe), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
 
+**Previsão máxima de balões** (nos blocos da Arena Livre e do Confronto Direto, em Config.):
+- Arena Livre: rodadas × equipes × balões montados na arena (padrão 9), com a divisão por cor.
+- Confronto Direto: (confrontos da fase preliminar + 2 semifinais + 1 final) × 3 balões, o máximo que pode ser estourado por confronto.
+
 Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
 
 ## Durante a competição
 - **Ajuste do cronômetro:** botões **−5 s / +5 s** abaixo do cronômetro (ex.: o juiz iniciou atrasado). Nunca passa do tempo máximo.
-- **Sons:** bipes separados para a Arena Livre e para o Confronto Direto: **bipe de início** quando a tentativa ou o round começa (não ao retomar uma pausa), intermediário curto (padrão aos 10 s e aos 5 s; os segundos são configuráveis) e final longo, cada um podendo ser ligado ou desligado. No Confronto, o intervalo entre os rounds não bipa (opcional). Configure em Config. → Sons e backup.
+- **Sons:** bipes separados para a Arena Livre e para o Confronto Direto: **bipe de início** quando a tentativa ou o round começa (não ao retomar uma pausa), intermediário curto (padrão: Arena Livre aos 5 s, Confronto Direto aos 10 s; os segundos são configuráveis) e final longo, cada um podendo ser ligado ou desligado. No Confronto, o intervalo entre os rounds não bipa (opcional). Configure em Config. → Sons e backup.
 - **Destaque no telão:** cada marcação aparece grande ("+50", "+100") por um instante.
 - **Falha técnica no Confronto:** **🔁 Repetir Round** zera o round atual (marcações e cronômetro), registrando o motivo.
 - **Backup automático:** ao fim da Arena Livre, da fase preliminar e da final, o sistema baixa sozinho a planilha e o JSON na pasta Downloads (pode ser desligado).

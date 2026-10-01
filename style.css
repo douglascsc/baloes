@@ -283,7 +283,6 @@ body.telao-window #app,body.telao-full #app{display:none}
   .standings td,.standings th{font-size:12px}.standings .tcell b{font-size:13px}
   .phases{grid-template-columns:1fr 1fr 1fr;gap:6px}.phase{flex-direction:column;align-items:flex-start;padding:8px}.phase b{font-size:12px}
   .bracket{grid-template-columns:1fr}
-  .hide-sm{display:none}
   .table th,.table td{padding:9px 5px}
   .m-side{min-width:0}
   .btn.huge{width:100%;font-size:17px}

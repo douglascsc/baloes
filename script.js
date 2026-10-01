@@ -95,18 +95,19 @@ function defaultSchedule() { return DEFAULT_SCHEDULE.map(([start, end, title, de
 function defaultColors() { return DEFAULT_COLORS.map(([name, hex], i) => ({ id: uid(), number: i + 1, name, hex })); }
 function defaultSettings() {
   return {
-    freeRounds: 4, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
+    freeRounds: 5, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
     freeOther: 50, freeOwn: 50, freeExit: 30,
-    cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30, cupBalloons: 2,
+    cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30, cupBalloons: 2, freeArenaBalloons: 9,
     winPts: 3, drawPts: 1, lossPts: 0,
     sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
     // bipes separados por prova; no Confronto Direto o intervalo não bipa (padrão)
-    freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "10, 5", freeBeepEnd: true,
-    cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10, 5", cupBeepEnd: true, cupBeepBreak: false,
+    freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "5", freeBeepEnd: true,
+    cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10", cupBeepEnd: true, cupBeepBreak: false,
+    defV: 1,
     // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
-    // Classificação pelo SALDO de pontos; desempate definido pela organização: pontos (V/E/D) → confronto direto → pontos marcados
-    tiebreak: [{ key: "pontos", on: true }, { key: "direto", on: true }, { key: "pro", on: true },
-      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 5
+    // Classificação pelo SALDO de pontos; desempate definido pela organização: confronto direto → pontos (V/E/D) → comissão
+    tiebreak: [{ key: "direto", on: true }, { key: "pontos", on: true }, { key: "pro", on: false },
+      { key: "vitorias", on: false }, { key: "arena", on: false }, { key: "sorteio", on: false }], tbV: 6
   };
 }
 function fresh(teamsList) {
@@ -162,7 +163,7 @@ function normalize(raw) {
   }
   s.colorV = 2;
   const st = { ...defaultSettings(), ...(s.settings || {}) };
-  st.freeRounds = Math.min(5, Math.max(1, Math.round(num(st.freeRounds, 4))));
+  st.freeRounds = Math.min(5, Math.max(1, Math.round(num(st.freeRounds, 5))));
   st.freeSeconds = Math.min(600, Math.max(5, Math.round(num(st.freeSeconds, 30))));
   st.freeRankMode = st.freeRankMode === "melhor" ? "melhor" : "soma";
   st.freeMinZero = !!st.freeMinZero;
@@ -170,7 +171,7 @@ function normalize(raw) {
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
-  st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30); st.cupBalloons = clampI(st.cupBalloons, 1, 10, 2);
+  st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30); st.cupBalloons = clampI(st.cupBalloons, 1, 10, 2); st.freeArenaBalloons = clampI(st.freeArenaBalloons, 1, 99, 9);
   st.winPts = clampI(st.winPts, 0, 10, 3); st.drawPts = clampI(st.drawPts, 0, 10, 1); st.lossPts = clampI(st.lossPts, 0, 10, 0);
   st.cupGames = [0, 2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 0;
   // Padrão passou a ser "todos contra todos": quem estava no padrão antigo (2) migra uma vez
@@ -184,6 +185,14 @@ function normalize(raw) {
   const secs = v => [...new Set(String(v ?? "10, 5").split(/[^\d]+/).map(Number).filter(n => n >= 1 && n <= 600))].sort((a, b) => b - a).slice(0, 10).join(", ");
   ["free", "cup"].forEach(p => { st[p + "BeepStart"] = st[p + "BeepStart"] !== false; st[p + "BeepMid"] = st[p + "BeepMid"] !== false; st[p + "BeepEnd"] = st[p + "BeepEnd"] !== false; st[p + "BeepMidAt"] = secs(st[p + "BeepMidAt"]); });
   st.cupBeepBreak = !!st.cupBeepBreak;
+  // Atualização única dos padrões (5 rodadas; bipe intermediário: Arena aos 5 s, Confronto aos 10 s).
+  // Só troca o que ainda estava no padrão anterior; as rodadas só mudam se a Arena ainda não começou.
+  if (!(num(rawSt.defV, 0) >= 1)) {
+    if (st.freeRounds === 4 && !((s.free && s.free.attempts) || []).length) st.freeRounds = 5;
+    if (st.freeBeepMidAt === "10, 5") st.freeBeepMidAt = "5";
+    if (st.cupBeepMidAt === "10, 5") st.cupBeepMidAt = "10";
+  }
+  st.defV = 1;
   const rawTb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   const rawKey = rawTb.map(x => x.key + (x.on ? 1 : 0)).join();
   // o saldo passou a ser o critério principal: sai da lista de desempate
@@ -192,8 +201,8 @@ function normalize(raw) {
   Object.keys(TIEBREAKS).forEach(k => { if (k !== "saldo" && !tb.some(x => x.key === k)) tb.push({ key: k, on: false }); });
   st.tiebreak = tb.map(x => ({ key: x.key, on: !!x.on }));
   // Quem ainda usa uma ordem padrão anterior (não personalizada) passa para a atual
-  const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0", "saldo1,direto1,pro1,vitorias0,arena0,sorteio0"];
-  if (!(s.settings && num(s.settings.tbV, 0) >= 5)) { if (OLD_TBS.includes(rawKey)) st.tiebreak = defaultSettings().tiebreak; st.tbV = 5; }
+  const OLD_TBS = ["direto1,saldo1,pro1,vitorias0,arena0,sorteio0", "saldo1,pro1,direto1,vitorias0,arena0,sorteio0", "saldo1,direto1,pro1,vitorias0,arena0,sorteio0", "pontos1,direto1,pro1,vitorias0,arena0,sorteio0"];
+  if (!(s.settings && num(s.settings.tbV, 0) >= 6)) { if (OLD_TBS.includes(rawKey)) st.tiebreak = defaultSettings().tiebreak; st.tbV = 6; }
   s.settings = st;
   const ids = new Set(s.teams.map(t => t.id));
   const f = s.free && typeof s.free === "object" ? s.free : {};
@@ -305,7 +314,7 @@ function logEv(msg) {
   state.log.push({ at: new Date().toISOString(), msg });
   if (state.log.length > 3000) state.log.splice(0, state.log.length - 3000);
 }
-/* Sons: bipe curto aos 10 s e aos 5 s, sinal longo no fim. O navegador só libera
+/* Sons: bipe de início, bipe curto intermediário (Arena aos 5 s, Confronto aos 10 s), sinal longo no fim. O navegador só libera
    o áudio depois de um clique na página. */
 let audioCtx = null;
 function getAudio() {
@@ -1839,6 +1848,17 @@ function exportSumula(kind) {
   } catch (e) { console.error(e); warn("Não foi possível gerar a súmula"); }
 }
 
+/* Previsão MÁXIMA de balões para comprar/encher (se todos os balões possíveis forem estourados) */
+function balloonEstimate(kind) {
+  const s = cfg(), n = teams().length;
+  if (kind === "free") {
+    const total = s.freeRounds * n * s.freeArenaBalloons, nc = state.colors.length;
+    return `<div class="notice mt-s">🎈 <b>Previsão máxima de balões: ${total}</b><br><span class="small">${s.freeRounds} rodada${s.freeRounds > 1 ? "s" : ""} × ${n} equipes × ${s.freeArenaBalloons} balões na arena${nc ? ` · cerca de ${Math.ceil(total / nc)} de cada cor (${sortedColors().map(c => c.name).join(", ")})` : ""}</span></div>`;
+  }
+  const pre = prelims().length || Math.round(n * gamesPerTeam(n) / 2), games = pre + 3, per = s.cupBalloons + 1;
+  return `<div class="notice cup mt-s">⚔️ <b>Previsão máxima de balões: ${games * per}</b><br><span class="small">(${pre} confrontos da fase preliminar + 2 semifinais + 1 final) = ${games} confrontos × ${per} balões (máximo que pode ser estourado por confronto)</span></div>`;
+}
+
 /* ============================ CONFIGURAÇÕES ============================ */
 function config() {
   const s = state.settings;
@@ -1856,8 +1876,9 @@ function config() {
         <div><label>Balão de outra cor (+ pontos)</label><input type="number" min="0" max="1000" value="${s.freeOther}" onchange="setSetting('freeOther',this.value)"></div>
         <div><label>Balão da própria cor (− pontos)</label><input type="number" min="0" max="1000" value="${s.freeOwn}" onchange="setSetting('freeOwn',this.value)"></div>
         <div><label>Saída da arena (− pontos)</label><input type="number" min="0" max="1000" value="${s.freeExit}" onchange="setSetting('freeExit',this.value)"></div>
+        <div><label>Balões montados na arena (por tentativa)</label><input type="number" min="1" max="99" value="${s.freeArenaBalloons}" onchange="setSetting('freeArenaBalloons',this.value)"></div>
         <div class="full"><label class="check"><input type="checkbox" ${s.freeMinZero ? "checked" : ""} onchange="setSetting('freeMinZero',this.checked)"> Não permitir pontuação negativa em uma tentativa (mínimo 0)</label></div>
-      </div><p class="muted small mt-s">Padrão: 4 rodadas (de 1 a 5) · 30 s · +50 / −50 / −30. A Arena Livre também pode ser encerrada antes, na própria tela, ao fim de uma rodada. Mudanças de pontuação valem para as próximas marcações.</p></div>
+      </div>${balloonEstimate("free")}<p class="muted small mt-s">Padrão: 5 rodadas (de 1 a 5) · 30 s · +50 / −50 / −30. A Arena Livre também pode ser encerrada antes, na própria tela, ao fim de uma rodada. Mudanças de pontuação valem para as próximas marcações.</p></div>
       <div class="card"><h2>⚔️ Confronto Direto</h2><div class="form-grid">
         <div><label>Round 1 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR1}" onchange="setSetting('cupR1',this.value)"></div>
         <div><label>Intervalo (segundos)</label><input type="number" min="0" max="900" value="${s.cupBreak}" onchange="setSetting('cupBreak',this.value)"></div>
@@ -1874,7 +1895,7 @@ function config() {
           <p class="muted small">Calculado com as ${teams().length} equipes cadastradas.</p>
           ${prelims().length ? `<p class="muted small">A fase preliminar atual tem ${prelims().length} confrontos. A mudança vale ao gerar a fase preliminar novamente.</p>` : ""}</div>
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
-      </div><p class="muted small mt-s">Padrão: todos contra todos · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
+      </div>${balloonEstimate("cup")}<p class="muted small mt-s">Padrão: todos contra todos · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · 3/1/0. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
         <label class="check"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
