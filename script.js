@@ -96,7 +96,7 @@ function defaultSettings() {
     freeRounds: 5, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
     freeOther: 50, freeOwn: 50, freeExit: 30,
     cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30, cupBalloons: 2, freeArenaBalloons: 9,
-    sound: true, soundTv: false, autoBackup: true, cupGames: 0, cupV: 2,
+    sound: true, soundTv: false, beepVol: 10, autoBackup: true, cupGames: 0, cupV: 2,
     // bipes separados por prova; no Confronto Direto o intervalo não bipa (padrão)
     freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "5", freeBeepEnd: true,
     cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10", cupBeepEnd: true, cupBeepBreak: false,
@@ -168,7 +168,7 @@ function normalize(raw) {
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
-  st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30); st.cupBalloons = clampI(st.cupBalloons, 1, 10, 2); st.freeArenaBalloons = clampI(st.freeArenaBalloons, 1, 99, 9);
+  st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30); st.cupBalloons = clampI(st.cupBalloons, 1, 10, 2); st.beepVol = clampI(st.beepVol, 1, 10, 10); st.freeArenaBalloons = clampI(st.freeArenaBalloons, 1, 99, 9);
   delete st.winPts; delete st.drawPts; delete st.lossPts; // a fase preliminar não usa pontos de vitória/empate/derrota
   st.cupGames = [0, 2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 0;
   // Padrão passou a ser "todos contra todos": quem estava no padrão antigo (2) migra uma vez
@@ -324,7 +324,9 @@ function getAudio() {
     return audioCtx;
   } catch (e) { return null; }
 }
-function tone(freq, dur, vol = 0.09) {
+// Volume dos bipes (Config., 1 a 10): padrão 10 = volume máximo da página (o antigo era 0,09)
+const beepGain = () => 0.1 * Math.min(10, Math.max(1, Math.round(num(cfg().beepVol, 10))));
+function tone(freq, dur, vol = beepGain()) {
   const c = getAudio(); if (!c) return;
   const play = () => {
     const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = freq;
@@ -1974,6 +1976,7 @@ function config() {
       </div>${balloonEstimate("cup")}<p class="muted small mt-s">Padrão: todos contra todos · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · classificação pelo saldo. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
+        <div class="vol-row"><label for="beepVol">🔊 Volume dos bipes: <b>${s.beepVol}</b> de 10</label><input id="beepVol" type="range" min="1" max="10" step="1" value="${s.beepVol}" onchange="setSetting('beepVol',this.value);getAudio();setTimeout(()=>beep('start'),80)"></div>
         <label class="check"><input type="checkbox" ${s.soundTv ? "checked" : ""} onchange="setSetting('soundTv',this.checked)"> Sons também no telão (clique uma vez na tela do telão para liberar o som)</label>
         <p class="muted small">Bipes (valem para este PC e para o telão):</p>
         ${[["free", "🎈 Arena Livre"], ["cup", "⚔️ Confronto Direto (Round 1 e Round 2)"]].map(([k, title]) => `<div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}">
