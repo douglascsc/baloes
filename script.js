@@ -218,7 +218,7 @@ function normalize(raw) {
   }
   const c = s.cup && typeof s.cup === "object" ? s.cup : {};
   s.cup = {
-    matches: (Array.isArray(c.matches) ? c.matches : []).filter(m => m && ["prelim", "semi", "final"].includes(m.stage)).map(m => ({
+    matches: (Array.isArray(c.matches) ? c.matches : []).filter(m => m && ["prelim", "semi", "third", "final"].includes(m.stage)).map(m => ({
       id: sid(m.id) || uid(), stage: m.stage, order: Math.round(num(m.order, 1)),
       a: ids.has(sid(m.a)) ? sid(m.a) : null, b: ids.has(sid(m.b)) ? sid(m.b) : null,
       status: ["pending", "live", "done"].includes(m.status) ? m.status : "pending",
@@ -953,16 +953,18 @@ function freeRankingCard() {
 }
 
 /* ============================ CONFRONTOS: LÓGICA ============================ */
-const STAGE_ORDER = { prelim: 0, semi: 1, final: 2 };
+const STAGE_ORDER = { prelim: 0, semi: 1, third: 2, final: 3 }; // a disputa de 3º lugar acontece antes da final
 const matches = () => [...state.cup.matches].sort((a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || a.order - b.order);
 const prelims = () => matches().filter(m => m.stage === "prelim");
 const semis = () => matches().filter(m => m.stage === "semi");
 const finalMatch = () => state.cup.matches.find(m => m.stage === "final") || null;
+const thirdMatch = () => state.cup.matches.find(m => m.stage === "third") || null;
 const liveMatch = () => state.cup.matches.find(m => m.id === state.cup.liveId && m.status === "live") || null;
 const nextMatch = () => matches().find(m => m.status === "pending") || null;
 function matchLabel(m) {
   if (m.stage === "prelim") return `Fase preliminar · Confronto ${m.order} de ${prelims().length}`;
   if (m.stage === "semi") return `Semifinal ${m.order} · ${m.order === 1 ? "1º × 4º" : "2º × 3º"}`;
+  if (m.stage === "third") return "DISPUTA DE 3º LUGAR";
   return "FINAL";
 }
 function sideScore(m, side, round) {
@@ -971,9 +973,10 @@ function sideScore(m, side, round) {
 }
 function cupSummary() {
   const ms = state.cup.matches, done = ms.filter(m => m.status === "done").length;
-  const n = prelims().length, total = n ? n + 3 : 0;
+  const n = prelims().length, total = n ? n + 4 : 0;
   let stageText = "fase preliminar";
   if (finalMatch()) stageText = finalMatch().status === "done" ? "encerrado" : "final";
+  else if (thirdMatch()) stageText = "disputa de 3º lugar";
   else if (semis().length) stageText = "semifinais";
   else if (!n) stageText = "não gerados";
   return { done, total, stageText };
@@ -1129,6 +1132,7 @@ function clearManualOrder() {
 }
 
 /* ---- Avanço automático de fase ---- */
+function loserOf(m) { const w = winnerOf(m); return w ? (w === m.a ? m.b : m.a) : null; }
 function winnerOf(m) { return m && m.status === "done" && m.winner && m.winner !== "draw" ? m.winner : null; }
 // Semifinais: os 4 primeiros da CLASSIFICAÇÃO GERAL = Arena Livre + saldo da fase preliminar
 // (desempate: mais pontos no Confronto, depois na Arena Livre, depois a numeração do sorteio)
@@ -1150,9 +1154,13 @@ function checkProgress() {
     logEv(`Semifinais geradas: ${teamName(s[0])} × ${teamName(s[3])}; ${teamName(s[1])} × ${teamName(s[2])}`);
   }
   const [s1, s2] = semis();
+  if (s1 && s2 && winnerOf(s1) && winnerOf(s2) && !thirdMatch()) {
+    state.cup.matches.push(emptyMatch("third", 1, loserOf(s1), loserOf(s2)));
+    logEv(`Disputa de 3º lugar gerada: ${teamName(loserOf(s1))} × ${teamName(loserOf(s2))}`);
+  }
   if (s1 && s2 && winnerOf(s1) && winnerOf(s2) && !finalMatch()) {
     state.cup.matches.push(emptyMatch("final", 1, winnerOf(s1), winnerOf(s2)));
-    toast("Final gerada"); logEv(`Final gerada: ${teamName(winnerOf(s1))} × ${teamName(winnerOf(s2))}`);
+    toast("Disputa de 3º lugar e final geradas"); logEv(`Final gerada: ${teamName(winnerOf(s1))} × ${teamName(winnerOf(s2))}`);
   }
   save();
 }
@@ -1288,8 +1296,8 @@ function confirmResult() {
     const other = semis().find(x => x.id !== m.id), f = finalMatch();
     const expect = m.order === 1 ? [winner, winnerOf(other)] : [winnerOf(other), winner];
     if (f.a !== expect[0] || f.b !== expect[1]) {
-      if (!confirm(`${txt}\n\nO vencedor mudou: a final será apagada e gerada novamente. Continuar?`)) return;
-      state.cup.matches = state.cup.matches.filter(x => x.stage !== "final");
+      if (!confirm(`${txt}\n\nO vencedor mudou: a disputa de 3º lugar e a final serão apagadas e geradas novamente. Continuar?`)) return;
+      state.cup.matches = state.cup.matches.filter(x => x.stage !== "final" && x.stage !== "third");
     } else if (!confirm(`${sa} × ${sb}\n${txt}\n\nConfirmar resultado?`)) return;
   } else if (!confirm(`${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)}\n${txt}\n\nConfirmar resultado?`)) return;
   const before = m._backup ? JSON.parse(m._backup) : null;
@@ -1298,7 +1306,7 @@ function confirmResult() {
   Object.assign(m, { status: "done", winner, byDecision, phase: "review", timer: newTimer(0) }); delete m._backup;
   state.cup.liveId = null; save();
   // o aviso de fase gerada (semifinais/final/empate) vem depois e fica visível
-  toast(m.stage === "final" ? `🏆 ${teamName(winner)} é o Vencedor - Confronto Direto!` : "Resultado registrado");
+  toast(m.stage === "final" ? `🏆 ${teamName(winner)} é o Vencedor - Confronto Direto!` : m.stage === "third" ? `🥉 ${teamName(winner)} fica com o 3º lugar!` : "Resultado registrado");
   checkProgress();
   render();
   if (m.stage === "prelim" && prelimDone() && !before) autoBackup("apos-fase-preliminar", "fase preliminar concluída");
@@ -1361,10 +1369,10 @@ function cupEdit(id) {
       const sd = seeds(), [s1, s2] = semis();
       const same = s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
       if (!same) drop = "ko";
-    } else if (m.stage === "semi" && finalMatch() && winner !== oldWinner) drop = "final";
-    if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação da fase preliminar muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a final será apagada e gerada novamente. Continuar?")) { m.rounds = oldRounds; m.winner = oldWinner; return; }
+    } else if (m.stage === "semi" && (finalMatch() || thirdMatch()) && winner !== oldWinner) drop = "final";
+    if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação da fase preliminar muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a disputa de 3º lugar e a final serão apagadas e geradas novamente. Continuar?")) { m.rounds = oldRounds; m.winner = oldWinner; return; }
     if (drop === "ko") state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim");
-    if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final");
+    if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final" && x.stage !== "third");
     Object.assign(m, { byDecision, pick: byDecision ? winner : null });
     logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`}`);
     void prev; save(); closeModal(); toast("Confronto corrigido"); checkProgress(); render();
@@ -1489,8 +1497,10 @@ function teamStatus(id, rows) {
   if (semis().length) {
     const inKo = semis().some(m => m.a === id || m.b === id);
     if (!inKo) return `<span class="chip out">Eliminado</span>`;
-    const lostSemi = semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id);
-    if (lostSemi) return `<span class="chip out">Semifinalista</span>`;
+    const lostSemi = semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id), th = thirdMatch();
+    if (lostSemi && th && winnerOf(th) === id) return `<span class="chip done">🥉 3º lugar - Confronto Direto</span>`;
+    if (lostSemi && th && winnerOf(th)) return `<span class="chip out">4º lugar - Confronto Direto</span>`;
+    if (lostSemi) return `<span class="chip out">${th ? "Disputa de 3º lugar" : "Semifinalista"}</span>`;
     if (f && f.status === "done") return `<span class="chip done">2º lugar - Confronto Direto</span>`;
     return `<span class="chip ok">${f ? "Finalista" : "Semifinal"}</span>`;
   }
@@ -1518,7 +1528,7 @@ function standingsCard() {
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
 }
 function bracketCard() {
-  const [s1, s2] = semis(), f = finalMatch(), champ = champion();
+  const [s1, s2] = semis(), f = finalMatch(), th = thirdMatch(), champ = champion();
   const slot = (m, side, ph) => {
     const id = m ? m[side] : null, t = findTeam(id), win = m && winnerOf(m) === id && id;
     return `<div class="b-team ${win ? "winner" : ""} ${t ? "" : "ph"}"><span>${t ? esc(t.name) : ph}</span>${m && m.status === "done" ? `<b>${reveal ? sideScore(m, side) : "••"}</b>` : ""}${win ? "<em>✓</em>" : ""}</div>`;
@@ -1527,8 +1537,8 @@ function bracketCard() {
   return `<div class="card mt ko"><div class="card-head"><h2>🏅 Fase eliminatória</h2><span class="pill">mata-mata</span></div>
     <div class="bracket">
       <div class="b-col">${box(s1, "Semifinal 1", "1º colocado", "4º colocado")}${box(s2, "Semifinal 2", "2º colocado", "3º colocado")}</div>
-      <div class="b-col mid">${box(f, "FINAL", "Vencedor Semifinal 1", "Vencedor Semifinal 2")}</div>
-      <div class="b-col"><div class="b-champ ${champ ? "on" : ""}"><div class="trophy">🏆</div><div class="eyebrow">VENCEDOR - CONFRONTO DIRETO</div><b>${champ ? esc(champ.name) : "A definir"}</b>${champ ? `<small>${esc(schoolText(champ))}</small>` : ""}</div></div>
+      <div class="b-col mid">${box(f, "FINAL", "Vencedor Semifinal 1", "Vencedor Semifinal 2")}${box(th, "DISPUTA DE 3º LUGAR", "Perdedor Semifinal 1", "Perdedor Semifinal 2")}</div>
+      <div class="b-col"><div class="b-champ ${champ ? "on" : ""}"><div class="trophy">🏆</div><div class="eyebrow">VENCEDOR - CONFRONTO DIRETO</div><b>${champ ? esc(champ.name) : "A definir"}</b>${champ ? `<small>${esc(schoolText(champ))}</small>` : ""}</div>${th && winnerOf(th) ? `<div class="b-third">🥉 3º lugar: <b>${esc(teamName(winnerOf(th)))}</b></div>` : ""}</div>
     </div></div>`;
 }
 
@@ -1703,12 +1713,12 @@ function sceneCupRank() {
   return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${(Q => rows.map(r => `<div class="tv-row ${done && Q.has(r.team.id) ? "top" : ""} ${done && !Q.has(r.team.id) ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${signed(r.SG)}</b></div>`).join(""))(new Set(done ? seeds() : []))}</div></div>`;
 }
 function sceneBracket() {
-  const [s1, s2] = semis(), f = finalMatch(), champ = champion(), rv = state.display.reveal;
+  const [s1, s2] = semis(), f = finalMatch(), th = thirdMatch(), champ = champion(), rv = state.display.reveal;
   const line = (m, side, ph) => { const id = m?.[side], w = m && winnerOf(m) === id && id; return `<div class="tv-bt ${w ? "w" : ""}"><span>${id ? esc(teamName(id)) : ph}</span>${m?.status === "done" && rv ? `<b>${sideScore(m, side)}</b>` : ""}</div>`; };
   return `<div class="tv tv-bracket"><div class="tv-mode cup">🏅 FASE ELIMINATÓRIA</div><div class="tv-bk">
     <div class="tv-col"><div class="tv-bm"><small>SEMIFINAL 1</small>${line(s1, "a", "1º colocado")}${line(s1, "b", "4º colocado")}</div><div class="tv-bm"><small>SEMIFINAL 2</small>${line(s2, "a", "2º colocado")}${line(s2, "b", "3º colocado")}</div></div>
-    <div class="tv-col"><div class="tv-bm final"><small>FINAL</small>${line(f, "a", "Vencedor SF1")}${line(f, "b", "Vencedor SF2")}</div></div>
-    <div class="tv-col"><div class="tv-bm champ"><div class="tv-trophy sm">🏆</div><small>VENCEDOR - CONFRONTO DIRETO</small><b>${champ ? esc(champ.name) : "A definir"}</b></div></div>
+    <div class="tv-col"><div class="tv-bm final"><small>FINAL</small>${line(f, "a", "Vencedor SF1")}${line(f, "b", "Vencedor SF2")}</div><div class="tv-bm"><small>DISPUTA DE 3º LUGAR</small>${line(th, "a", "Perdedor SF1")}${line(th, "b", "Perdedor SF2")}</div></div>
+    <div class="tv-col"><div class="tv-bm champ"><div class="tv-trophy sm">🏆</div><small>VENCEDOR - CONFRONTO DIRETO</small><b>${champ ? esc(champ.name) : "A definir"}</b>${th && winnerOf(th) ? `<small class="tv-third">🥉 3º lugar: ${esc(teamName(winnerOf(th)))}</small>` : ""}</div></div>
   </div></div>`;
 }
 function telao() {
@@ -1843,7 +1853,7 @@ function buildXlsx(sheets) {
   ], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 const stageName = m => ({ prelim: "Fase preliminar", semi: "Semifinal", final: "Final" })[m.stage];
-const matchName = m => m.stage === "prelim" ? `Confronto ${m.order}` : m.stage === "semi" ? `Semifinal ${m.order}` : "Final";
+const matchName = m => m.stage === "prelim" ? `Confronto ${m.order}` : m.stage === "semi" ? `Semifinal ${m.order}` : m.stage === "third" ? "Disputa de 3º lugar" : "Final";
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("pt-BR"); };
 function resultSheets() {
   const R = state.settings.freeRounds, fs = freeSummary(), cs = cupSummary(), champ = champion(), f = finalMatch();
@@ -1854,6 +1864,8 @@ function resultSheets() {
   const situation = id => {
     if (champ && champ.id === id) return "Vencedor - Confronto Direto";
     if (vice && vice.id === id) return "2º lugar - Confronto Direto";
+    if (thirdMatch() && winnerOf(thirdMatch()) === id) return "3º lugar - Confronto Direto";
+    if (thirdMatch() && loserOf(thirdMatch()) === id) return "4º lugar - Confronto Direto";
     if (semis().some(m => (m.a === id || m.b === id) && winnerOf(m) && winnerOf(m) !== id)) return "Semifinalista";
     if (semis().length) return semis().some(m => m.a === id || m.b === id) ? (f ? "Finalista" : "Semifinalista") : "Eliminado na fase preliminar";
     return done ? "" : "Em disputa";
@@ -1988,6 +2000,8 @@ function sumulaCup() {
   const [s1, s2] = semis(), f = finalMatch();
   pages.push({ phase: ph.semi, label: "Semifinal 1 · 1º colocado × 4º colocado", a: s1?.a, b: s1?.b });
   pages.push({ phase: ph.semi, label: "Semifinal 2 · 2º colocado × 3º colocado", a: s2?.a, b: s2?.b });
+  const th = thirdMatch();
+  pages.push({ phase: "Disputa de 3º lugar", label: "3º lugar · perdedor SF1 × perdedor SF2", a: th?.a, b: th?.b });
   pages.push({ phase: ph.final, label: "Final · vencedor SF1 × vencedor SF2", a: f?.a, b: f?.b });
   pages.push({ phase: "", label: "Confronto nº ____ (reserva / repetição)" });
   const teamHdr = (side, id) => {
@@ -2033,8 +2047,8 @@ function balloonEstimate(kind) {
     const total = s.freeRounds * n * s.freeArenaBalloons, nc = state.colors.length;
     return `<div class="notice mt-s">🎈 <b>Previsão máxima de balões: ${total}</b><br><span class="small">${s.freeRounds} rodada${s.freeRounds > 1 ? "s" : ""} × ${n} equipes × ${s.freeArenaBalloons} balões na arena${nc ? ` · cerca de ${Math.ceil(total / nc)} de cada cor (${sortedColors().map(c => c.name).join(", ")})` : ""}</span></div>`;
   }
-  const pre = prelims().length || Math.round(n * gamesPerTeam(n) / 2), games = pre + 3, per = s.cupBalloons + 1;
-  return `<div class="notice cup mt-s">⚔️ <b>Previsão máxima de balões: ${games * per}</b><br><span class="small">(${pre} confrontos da fase preliminar + 2 semifinais + 1 final) = ${games} confrontos × ${per} balões (máximo que pode ser estourado por confronto)</span></div>`;
+  const pre = prelims().length || Math.round(n * gamesPerTeam(n) / 2), games = pre + 4, per = s.cupBalloons + 1;
+  return `<div class="notice cup mt-s">⚔️ <b>Previsão máxima de balões: ${games * per}</b><br><span class="small">(${pre} confrontos da fase preliminar + 2 semifinais + 3º lugar + 1 final) = ${games} confrontos × ${per} balões (máximo que pode ser estourado por confronto)</span></div>`;
 }
 
 /* ============================ CONFIGURAÇÕES ============================ */

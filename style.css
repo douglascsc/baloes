@@ -478,3 +478,7 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .ce-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ce-cell{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line2);border-radius:10px;background:var(--soft)}
 .ce-cell label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+/* Disputa de 3º lugar */
+.b-col.mid{display:flex;flex-direction:column;gap:14px}
+.b-third{margin-top:10px;padding:8px 12px;border-radius:10px;background:#f6efe6;border:1px solid #e7d3bb;font-size:13px;text-align:center}
+.tv-third{display:block;margin-top:.6cqw;font-size:1.4cqw;color:#8a5a2b;font-weight:800}
