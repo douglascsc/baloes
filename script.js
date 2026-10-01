@@ -1474,9 +1474,9 @@ function sceneGeral() {
 
 /* ============================ TELÃO ============================ */
 /* ---- Telão dos sorteios: ANTES (Equipe XX / sem cor) → animação → DEPOIS ----
-   Contagem 3, 2, 1; depois uma equipe a cada 1,5 s: "roleta" por 1 s e para no resultado (bipe curto),
+   Contagem 3, 2, 1; depois uma equipe a cada 3 s: "roleta" por 2 s e para no resultado (bipe curto),
    bipe longo na última. A linha do tempo usa o horário do sorteio, então telões em outros PCs ficam juntos. */
-const ANIM = { count: 3000, step: 1500, spin: 1000 };
+const ANIM = { count: 3000, step: 3000, spin: 2000 };
 function startDrawAnim(kind, order) {
   state.display.anim = order.length ? { kind, at: Date.now(), order } : null;
   if (order.length) state.display.mode = kind;
