@@ -48,7 +48,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - **Robô saiu da arena (5.1.2.1 c):** +30 para o adversário e **só o round** encerra. No Round 1, segue para o intervalo e o Round 2 acontece normalmente, com os balões que sobraram. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** (na lista de confrontos e no chaveamento) abre uma janela para ajustar os balões estourados e as saídas de cada equipe em cada round, mesmo com outro confronto em andamento; o vencedor, a classificação e, se preciso, semifinais/final são recalculados.
 - **Classificação da fase preliminar: pelo saldo** = soma dos pontos marcados pela equipe nos confrontos (os pontos do adversário não são descontados). Não há pontos de vitória/empate/derrota; a tabela mostra jogos (J), vitórias (V), empates (E), derrotas (D) e o saldo.
-- **Semifinais** geradas automaticamente: 1º × 4º e 2º × 3º. **Final:** vencedores das semifinais.
+- **Semifinais** geradas automaticamente com os **4 primeiros da Classificação Geral** (Arena Livre + saldo da fase preliminar): 1º × 4º e 2º × 3º. Saem quando a fase preliminar **e** a Arena Livre estão concluídas. Empate na Classificação Geral: mais pontos no Confronto, depois na Arena Livre, depois a menor numeração do sorteio. Se uma correção mudar os 4 primeiros antes de as semifinais começarem, elas são refeitas. **Final:** vencedores das semifinais.
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)

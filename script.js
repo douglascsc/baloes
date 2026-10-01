@@ -765,7 +765,7 @@ function freeFinish() {
   logEv(`Arena Livre: ${teamName(cur.teamId)} — Rodada ${cur.round} registrada: ${signed(total)} (${c("Balão de outra cor")} de outra cor, ${c("Balão da própria cor")} da própria cor, ${c("Saiu da arena")} saída(s))`);
   state.free.current = null; save(); toast("Resultado registrado"); render();
   const fs = freeSummary();
-  if (fs.total && fs.done >= fs.total) autoBackup("apos-arena-livre", "Arena Livre concluída");
+  if (fs.total && fs.done >= fs.total) { autoBackup("apos-arena-livre", "Arena Livre concluída"); checkProgress(); render(); }
 }
 function freeCancel() {
   const cur = state.free.current; if (!cur) return;
@@ -809,8 +809,16 @@ function freeEdit(id) {
     ev.preventDefault(); const before = attemptTotal(a);
     a.events = build();
     logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}`);
+    resyncSemis();
     save(); closeModal(); toast("Tentativa corrigida"); render();
   };
+}
+// A Classificação Geral mudou (correção na Arena): se as semifinais ainda não foram jogadas, refaz com os novos 4 primeiros
+function resyncSemis() {
+  const [s1, s2] = semis(); if (!s1 || !s2) return;
+  const sd = seeds(); if (s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2]) return;
+  if (state.cup.matches.some(x => x.stage !== "prelim" && x.status !== "pending")) return warn("A Classificação Geral mudou, mas as semifinais já começaram: confira os confrontos com a Comissão.");
+  state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim"); checkProgress(); toast("Classificação Geral mudou: semifinais refeitas");
 }
 function freeVoid(id) {
   const a = state.free.attempts.find(x => x.id === id); if (!a) return;
@@ -829,7 +837,7 @@ function closeArena() {
   if (!confirm(`Encerrar a Arena Livre com ${r} rodada${r > 1 ? "s" : ""}?${extra ? `\n\n${extra} tentativa(s) da Rodada ${r + 1} ficarão fora da classificação (não são apagadas).` : ""}\n\nDá para reabrir depois, se necessário.`)) return;
   state.settings.freeRounds = r;
   logEv(`Arena Livre encerrada com ${r} rodada(s)`);
-  save(); render();
+  checkProgress(); save(); render();
   autoBackup("apos-arena-livre", "Arena Livre concluída");
 }
 function reopenArena() {
@@ -1122,15 +1130,23 @@ function clearManualOrder() {
 
 /* ---- Avanço automático de fase ---- */
 function winnerOf(m) { return m && m.status === "done" && m.winner && m.winner !== "draw" ? m.winner : null; }
-function seeds() { return standings().slice(0, 4).map(r => r.team.id); }
+// Semifinais: os 4 primeiros da CLASSIFICAÇÃO GERAL = Arena Livre + saldo da fase preliminar
+// (desempate: mais pontos no Confronto, depois na Arena Livre, depois a numeração do sorteio)
+function seedRanking() {
+  const pre = new Map(standings().map(r => [r.team.id, r.SG])), fr = freeRanking();
+  return sortedTeams().filter(t => pre.has(t.id)).map(t => { const arena = fr.find(r => r.team.id === t.id)?.total || 0, cup = pre.get(t.id); return { team: t, arena, cup, total: arena + cup }; })
+    .sort((a, b) => b.total - a.total || b.cup - a.cup || b.arena - a.arena || byNum(a.team, b.team));
+}
+function seeds() { return seedRanking().slice(0, 4).map(r => r.team.id); }
 function checkProgress() {
   if (prelimDone() && !semis().length) {
     const rows = standings();
     if (rows.length < 4) return;
-    if (blockingTie(rows)) { warn("Empate não resolvido na classificação — defina a ordem para gerar as semifinais."); return; }
+    const fs = freeSummary();
+    if (fs.done < fs.total) { warn(`Fase preliminar concluída. As semifinais usam a Classificação Geral: termine a Arena Livre (${fs.done}/${fs.total} tentativas) para gerá-las.`); return; }
     const s = seeds();
     state.cup.matches.push(emptyMatch("semi", 1, s[0], s[3]), emptyMatch("semi", 2, s[1], s[2]));
-    toast("Semifinais geradas: 1º × 4º e 2º × 3º");
+    toast("Semifinais geradas pela Classificação Geral: 1º × 4º e 2º × 3º");
     logEv(`Semifinais geradas: ${teamName(s[0])} × ${teamName(s[3])}; ${teamName(s[1])} × ${teamName(s[2])}`);
   }
   const [s1, s2] = semis();
@@ -1262,7 +1278,7 @@ function confirmResult() {
     const prev = { status: m.status, winner: m.winner };
     m.status = "done"; m.winner = winner;
     const s = seeds(), rows = standings(); const [s1, s2] = semis();
-    const same = !blockingTie(rows) && s1 && s2 && s1.a === s[0] && s1.b === s[3] && s2.a === s[1] && s2.b === s[2];
+    const same = s1 && s2 && s1.a === s[0] && s1.b === s[3] && s2.a === s[1] && s2.b === s[2];
     m.status = prev.status; m.winner = prev.winner;
     if (!same) {
       if (!confirm(`${txt}\n\nCom essa correção a classificação muda: semifinais e final serão apagadas e geradas novamente. Continuar?`)) return;
@@ -1343,7 +1359,7 @@ function cupEdit(id) {
     let drop = null;
     if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim")) {
       const sd = seeds(), [s1, s2] = semis();
-      const same = !blockingTie(standings()) && s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
+      const same = s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
       if (!same) drop = "ko";
     } else if (m.stage === "semi" && finalMatch() && winner !== oldWinner) drop = "final";
     if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação da fase preliminar muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a final será apagada e gerada novamente. Continuar?")) { m.rounds = oldRounds; m.winner = oldWinner; return; }
@@ -1485,19 +1501,20 @@ function teamStatus(id, rows) {
 function standingsCard() {
   const rows = standings(), done = prelimDone(), crits = state.settings.tiebreak.filter(x => x.on).map(x => TIEBREAKS[x.key].label);
   const list = reveal ? rows : [...rows].sort((a, b) => byNum(a.team, b.team));
+  const Q = new Set(done ? seeds() : []);
   const body = list.map(r => {
-    const cls = reveal && done ? (r.pos <= 4 ? "qual" : "elim") : "";
+    const cls = reveal && done ? (Q.has(r.team.id) ? "qual" : "elim") : "";
     const arrows = reveal && done && r.tied ? `<span class="tie-arrows"><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',-1)" title="Subir">▲</button><button class="btn tiny" onclick="moveInTie('${esc(r.team.id)}',1)" title="Descer">▼</button></span>` : "";
     const tag = reveal && done && r.tied ? `<span class="chip warn">empate</span>` : reveal && r.manual ? `<span class="chip">decisão da comissão</span>` : "";
     return `<tr class="${cls}">${reveal ? `<td class="pos">${r.pos}º</td>` : ""}<td>${teamCell(r.team, `<div class="row-tags">${teamStatus(r.team.id, rows)}${tag}${arrows}</div>`)}</td>
       <td class="num">${r.J}</td><td class="num">${hide(r.V)}</td><td class="num">${hide(r.E)}</td><td class="num">${hide(r.D)}</td><td class="num total">${hide(r.SG > 0 ? "+" + r.SG : r.SG)}</td></tr>`;
   }).join("");
-  const blocking = done && !semis().length && blockingTie(rows);
+  const blocking = false; // semifinais saem da Classificação Geral (empates resolvidos lá)
   return `<div class="card"><div class="card-head"><h2>Classificação · fase preliminar</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Resultados ocultos — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
     <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num">Saldo</th></tr></thead><tbody>${body}</tbody></table></div>
     ${blocking ? `<div class="notice warn mt-s"><b>Empate não resolvido entre os 4 primeiros.</b> ${reveal ? `Ajuste a ordem com ▲▼ conforme a decisão da Comissão Organizadora e confirme:` : "Revele a pontuação (👁️) para resolver."} ${reveal ? `<div class="mt-s"><button class="btn primary" onclick="confirmTieOrder()">✓ Confirmar ordem e gerar semifinais</button></div>` : ""}</div>` : ""}
-    <p class="muted small mt-s"><b>Classificação pelo saldo</b> = soma dos pontos marcados pela equipe nos confrontos. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
+    <p class="muted small mt-s"><b>Classificação pelo saldo</b> = soma dos pontos marcados pela equipe nos confrontos. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. Semifinais: os 4 primeiros da <b>Classificação Geral</b> (Arena Livre + saldo da preliminar), 1º × 4º e 2º × 3º.
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
 }
 function bracketCard() {
@@ -1541,10 +1558,10 @@ function geral() {
     <div class="card"><div class="card-head"><h2>Classificação Geral</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
     <div class="table-wrap"><table class="table geral" aria-label="Classificação Geral"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">🎈 Arena Livre</th><th class="num">⚔️ Confronto Direto</th><th class="num">Total</th></tr></thead><tbody>
-    ${list.map((r, i) => `<tr class="${reveal && i < 3 ? "qual" : ""}">${reveal ? `<td class="pos">${i + 1}º ${medal(i)}</td>` : ""}<td>${teamCell(r.team, ties[i] ? `<div class="row-tags"><span class="chip warn">empate com a equipe acima</span></div>` : "")}</td>
+    ${list.map((r, i) => `<tr class="${reveal && i < 4 ? "qual" : ""}">${reveal ? `<td class="pos">${i + 1}º ${medal(i)}</td>` : ""}<td>${teamCell(r.team, ties[i] ? `<div class="row-tags"><span class="chip warn">empate com a equipe acima</span></div>` : "")}</td>
       <td class="num">${hide(signed(r.arena), r.arena < 0 ? "minus" : "")}</td><td class="num">${hide(r.cup)}</td><td class="num total">${hide(signed(r.total), r.total < 0 ? "minus" : "")}</td></tr>`).join("") || `<tr><td colspan="5">Nenhuma equipe.</td></tr>`}
     </tbody></table></div>
-    <p class="muted small mt-s">Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre. Persistindo, decisão da comissão. O Vencedor - Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
+    <p class="muted small mt-s"><b>Os 4 primeiros vão às semifinais</b> (1º × 4º e 2º × 3º), considerando a Arena Livre + o saldo da fase preliminar. Empate no total: fica à frente quem marcou mais no Confronto Direto; depois, mais na Arena Livre; depois, a menor numeração do sorteio. O Vencedor - Confronto Direto continua definido pela final. As opções ficam em Configurações.</p></div>`;
 }
 function sceneCrono() {
   const n = nowHHMM();
@@ -1683,7 +1700,7 @@ function sceneCupRank() {
   if (!state.display.reveal) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
   const rows = standings(), done = prelimDone();
   if (!rows.length) return tvHidden("⚔️ CLASSIFICAÇÃO · CONFRONTO DIRETO");
-  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${rows.map(r => `<div class="tv-row ${done && r.pos <= 4 ? "top" : ""} ${done && r.pos > 4 ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${signed(r.SG)}</b></div>`).join("")}</div></div>`;
+  return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode cup">⚔️ CLASSIFICAÇÃO · FASE PRELIMINAR</div><div class="tv-table">${(Q => rows.map(r => `<div class="tv-row ${done && Q.has(r.team.id) ? "top" : ""} ${done && !Q.has(r.team.id) ? "out" : ""}"><span class="p">${r.pos}º</span><span class="n">${esc(r.team.name)}<small>${esc(schoolText(r.team))} · ${r.J}J ${r.V}V ${r.E}E ${r.D}D</small></span><b>${signed(r.SG)}</b></div>`).join(""))(new Set(done ? seeds() : []))}</div></div>`;
 }
 function sceneBracket() {
   const [s1, s2] = semis(), f = finalMatch(), champ = champion(), rv = state.display.reveal;
@@ -1865,7 +1882,7 @@ function resultSheets() {
     { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Situação", "Repetições (falha técnica)"],
       ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin ? sideScore(m, "b") : "", fin ? (m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar", (m.repeats || []).map(x => `Round ${x.round} — ${fmtDate(x.at)}: ${x.reason}`).join(" | ")]; })] },
     { name: "Confronto - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", "Jogos", "Vitórias", "Empates", "Derrotas", "Pontos marcados", "Pontos sofridos", "Saldo", "Situação"],
-      ...st.map(r => [r.pos, noLabel(r.team), r.team.name, schoolText(r.team), r.J, r.V, r.E, r.D, r.PM, r.PS, r.SG, situation(r.team.id) || (done ? (r.pos <= 4 ? "Classificado para a semifinal" : "Eliminado na fase preliminar") : "")])] },
+      ...st.map(r => [r.pos, noLabel(r.team), r.team.name, schoolText(r.team), r.J, r.V, r.E, r.D, r.PM, r.PS, r.SG, situation(r.team.id) || (done ? (seeds().includes(r.team.id) ? "Classificado para a semifinal" : "Eliminado na fase preliminar") : "")])] },
     { name: "Confronto - Marcações", rows: [["Fase", "Confronto", "Round", "Tempo", "Equipe", "Escola", "Evento", "Pontos"],
       ...allMatches.filter(m => m.status === "done").flatMap(m => [1, 2].flatMap(r => m.rounds[r].events.map(e => { const t = findTeam(e.side === "a" ? m.a : m.b); return [stageName(m), matchName(m), r, e.t, t?.name || "", schoolText(t), e.label, e.pts]; })))] },
     { name: "Classificação Geral", rows: [["Posição", "Nº", "Equipe", "Escola", "Arena Livre", "Confronto Direto (pontos marcados)", "Total"],
@@ -2294,6 +2311,8 @@ function startUI() {
     window.addEventListener("storage", e => { if (e.key === KEY) { const v = state.view; state = load(); state.view = v; render(); } });
   }
   updateNetPill();
+  // semifinais ainda não jogadas que foram geradas pela regra antiga (só a preliminar) passam a seguir a Classificação Geral
+  if (!TELAO_WINDOW && semis().length && !state.cup.matches.some(x => x.stage !== "prelim" && x.status !== "pending")) { const before = semis().map(m => m.a + m.b).join(); resyncSemis(); if (semis().map(m => m.a + m.b).join() !== before) { logEv("Semifinais refeitas pela Classificação Geral"); save(); } }
   render();
 }
 let lastMinute = "";
