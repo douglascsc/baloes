@@ -83,6 +83,11 @@ Não precisa de internet nem de banco de dados: os dois PCs só precisam estar n
 - Rede da escola bloqueando a comunicação entre computadores? Use o roteador do celular ou um cabo de rede direto entre os dois PCs. Com cabo direto, o endereço mostrado é do tipo `http://169.254.x.x:8000` e aparece marcado como "cabo de rede direto". Pode levar cerca de 1 minuto depois de ligar o cabo para ele aparecer; se não aparecer, feche e abra o `.bat` de novo.
 - No Mac ou Linux, use `python3 servidor.py` no lugar do `.bat`.
 
+## Começar do zero (antes da competição)
+- **Config. → Limpar histórico:** apaga só os registros do histórico.
+- **Config. → Resetar tudo:** apaga resultados e volta ao cadastro inicial das equipes (mantém configurações e histórico).
+- **Config. → 🧹 Zerar este computador:** deixa o sistema como recém-instalado: apaga equipes, resultados, cores, cronograma, configurações e histórico guardados neste navegador e, se o servidor estiver ligado, também a cópia `dados-competicao.json` (o telão zera junto). Pede para digitar **ZERAR**. Não mexe em outros sites. Exporte um backup antes, se quiser guardar.
+
 ## Planilha de resultados (Excel)
 Em **Config. → 📊 Exportar planilha (Excel)**, ou pelo botão na Classificação Geral, é gerado um arquivo `.xlsx`, sem precisar de internet, com as abas:
 Resumo · Equipes · Arena - Classificação · Arena - Tentativas · Arena - Marcações · Confronto - Jogos · Confronto - Classificação · Confronto - Marcações · Classificação Geral · Cronograma · Histórico.

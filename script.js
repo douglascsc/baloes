@@ -282,8 +282,9 @@ function load() {
 }
 let state = load();
 state.view = "inicio"; // o sistema sempre abre no Início (não volta para a última tela usada)
+let RESETTING = false;
 function save() {
-  if (TELAO_WINDOW) return;
+  if (TELAO_WINDOW || RESETTING) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { warn("Não foi possível salvar no navegador (armazenamento cheio ou bloqueado). Exporte um backup em Configurações."); }
   if (NET.on && NET.local) { clearTimeout(NET.timer); NET.timer = setTimeout(pushState, 120); }
 }
@@ -1916,7 +1917,9 @@ function config() {
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
         ${prelims().length ? `<button class="btn danger" onclick="generatePrelim()">↻ Gerar novamente a fase preliminar (apaga confrontos e resultados)</button>` : ""}
         <button class="btn danger" onclick="resetCup()">Zerar Confronto Direto (apaga confrontos e resultados)</button>
-        <button class="btn danger" onclick="resetAll()">Resetar tudo (volta ao cadastro inicial das ${INITIAL_TEAMS.length} equipes)</button></div></div>
+        <button class="btn danger" onclick="resetAll()">Resetar tudo (volta ao cadastro inicial das ${INITIAL_TEAMS.length} equipes)</button>
+        <button class="btn danger" onclick="factoryReset()">🧹 Zerar este computador (sistema como recém-instalado)</button></div>
+        <p class="muted small mt-s"><b>Zerar este computador</b> apaga tudo o que o sistema guardou neste navegador (equipes, resultados, cores, cronograma, configurações e histórico)${NET.on && NET.local ? " e também a cópia do servidor (dados-competicao.json)" : ""}. Não mexe em outros sites. Exporte um backup antes, se quiser guardar.</p></div>
     </div>`;
   document.getElementById("importFile").onchange = importData;
 }
@@ -1949,6 +1952,21 @@ function importData(e) {
 }
 function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [], draws: {} }; logEv("Arena Livre zerada (tentativas e cores apagadas)"); save(); toast("Arena Livre zerada"); render(); }
 function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) return; state.cup = { matches: [], liveId: null, manualOrder: [] }; logEv("Confronto Direto zerado"); save(); toast("Confronto Direto zerado"); render(); }
+// Volta o sistema ao estado de recém-instalado: apaga só o que ESTE sistema guardou no navegador
+// (e a cópia do servidor local, se estiver em uso). Outros sites não são afetados.
+async function factoryReset() {
+  const ans = prompt("ZERAR ESTE COMPUTADOR\n\nApaga TUDO do sistema neste navegador: equipes, resultados, cores, cronograma, configurações e histórico" + (NET.on && NET.local ? ", e também a cópia do servidor" : "") + ".\nO sistema volta como recém-instalado. Exporte um backup antes, se quiser guardar.\n\nPara confirmar, digite ZERAR:", "");
+  if (ans === null) return;
+  if (str(ans).toUpperCase() !== "ZERAR") return warn("Nada foi apagado (é preciso digitar ZERAR).");
+  RESETTING = true; clearTimeout(NET.timer);
+  if (NET.on && NET.local) {
+    // o servidor também precisa ficar vazio, senão o sistema e o telão recarregariam os dados antigos dele
+    try { const r = await fetchT("/api/estado", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: normalize(fresh()) }) }); if (!r.ok) throw new Error(r.status); }
+    catch (e) { RESETTING = false; return warn("Não foi possível zerar a cópia do servidor. Confira se o iniciar-servidor.bat está aberto e tente de novo. Nada foi apagado."); }
+  }
+  try { Object.keys(localStorage).filter(k => k.startsWith("robosapiens")).forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) { /* segue */ }
+  location.reload();
+}
 // Apaga só o histórico (ex.: registros dos testes antes da competição); dados da competição não mudam
 function clearLog() {
   if (!confirm(`Apagar os ${state.log.length} registros do histórico?\nEquipes, resultados e configurações NÃO mudam.\nSe quiser guardar, exporte a planilha antes.`)) return;
