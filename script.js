@@ -1518,7 +1518,7 @@ function sceneColors() {
     const real = drawOf(t.id), s = an ? an.st(t.id) : (real ? "done" : "none");
     const c = s === "spin" && cols.length ? cols[Math.floor(an.t / 140 + t.name.length) % cols.length] : (s === "done" || s === "just") && !an?.count ? real : null;
     const cls = an?.count ? "wait" : s === "spin" ? "cur spin" : s === "just" ? "cur got" : s === "done" ? (real ? "got" : "") : s === "wait" ? "wait" : "";
-    return `<div class="tv-dc ${cls}">${c ? `<span class="tv-dot big" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="tv-dot big none">?</span>`}<span class="n">${esc(t.name)}<small>${s === "spin" ? "sorteando…" : c ? esc(c.name) : "sem cor"}</small></span></div>`;
+    return `<div class="tv-dc ${cls}">${c ? `<span class="tv-dot big" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="tv-dot big none">${numIn(t) || "?"}</span>`}<span class="n">${esc(t.name)}<small>${s === "spin" ? "sorteando…" : c ? esc(c.name) : "sem cor"}</small></span></div>`;
   };
   return `<div class="tv tv-rank tv-draw"><div class="tv-mode arena">🎨 SORTEIO DAS CORES · ARENA LIVRE</div><div class="tv-draw-sub">${sub}</div>
     <div class="tv-draw-grid">${list.map(card).join("")}</div>
