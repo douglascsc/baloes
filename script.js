@@ -1055,7 +1055,8 @@ function prelimStats() {
     else if (sb > sa) { B.V++; A.D++; }
     else { A.E++; B.E++; }
   });
-  Object.values(map).forEach(s => { s.SG = s.PM - s.PS; });
+  // Saldo (definido pela organização) = soma dos pontos marcados pela equipe nos confrontos (não desconta os sofridos)
+  Object.values(map).forEach(s => { s.SG = s.PM; });
   return Object.values(map).filter(s => s.team);
 }
 function critValue(key, s, group) {
@@ -1087,7 +1088,7 @@ function splitBy(group, crits) {
 function standings() {
   const stats = prelimStats();
   const crits = state.settings.tiebreak.filter(x => x.on).map(x => x.key);
-  // critério principal: saldo de pontos (marcados − sofridos); os demais só desempatam
+  // critério principal: saldo = pontos marcados nos confrontos; os demais só desempatam
   const bySG = [...stats].sort((a, b) => b.SG - a.SG);
   const groups = [];
   bySG.forEach(s => { const g = groups[groups.length - 1]; if (g && g[0].SG === s.SG) g.push(s); else groups.push([s]); });
@@ -1443,7 +1444,7 @@ function standingsCard() {
     ${reveal ? "" : `<p class="muted small">Resultados ocultos — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
     <div class="table-wrap"><table class="table standings" aria-label="Classificação da fase preliminar"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th><th class="num">J</th><th class="num">V</th><th class="num">E</th><th class="num">D</th><th class="num">Saldo</th></tr></thead><tbody>${body}</tbody></table></div>
     ${blocking ? `<div class="notice warn mt-s"><b>Empate não resolvido entre os 4 primeiros.</b> ${reveal ? `Ajuste a ordem com ▲▼ conforme a decisão da Comissão Organizadora e confirme:` : "Revele a pontuação (👁️) para resolver."} ${reveal ? `<div class="mt-s"><button class="btn primary" onclick="confirmTieOrder()">✓ Confirmar ordem e gerar semifinais</button></div>` : ""}</div>` : ""}
-    <p class="muted small mt-s"><b>Classificação pelo saldo de pontos</b> (marcados − sofridos). Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
+    <p class="muted small mt-s"><b>Classificação pelo saldo</b> = soma dos pontos marcados pela equipe nos confrontos. Desempate: ${crits.length ? crits.join(" → ") : "nenhum critério ativo"} → decisão da comissão. ${done ? "Classificam-se os 4 primeiros." : ""}
     ${state.cup.manualOrder.length ? `<button class="btn tiny ghost" onclick="clearManualOrder()">Limpar decisões manuais</button>` : ""}</p></div>`;
 }
 function bracketCard() {
