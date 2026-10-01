@@ -93,7 +93,7 @@ function defaultSchedule() { return DEFAULT_SCHEDULE.map(([start, end, title, de
 function defaultColors() { return DEFAULT_COLORS.map(([name, hex], i) => ({ id: uid(), number: i + 1, name, hex })); }
 function defaultSettings() {
   return {
-    freeRounds: 5, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "todas",
+    freeRounds: 5, freeSeconds: 30, freeRankMode: "soma", freeMinZero: false, geralCup: "prelim",
     freeOther: 50, freeOwn: 50, freeExit: 30,
     cupR1: ROUND1_SECONDS, cupBreak: BREAK_SECONDS, cupR2: ROUND2_SECONDS, cupBalloon: 100, cupExit: 30, cupBalloons: 2, freeArenaBalloons: 9,
     sound: true, soundTv: false, beepVol: 10, autoBackup: true, cupGames: 0, cupV: 2,
@@ -164,7 +164,7 @@ function normalize(raw) {
   st.freeSeconds = Math.min(600, Math.max(5, Math.round(num(st.freeSeconds, 30))));
   st.freeRankMode = st.freeRankMode === "melhor" ? "melhor" : "soma";
   st.freeMinZero = !!st.freeMinZero;
-  st.geralCup = st.geralCup === "prelim" ? "prelim" : "todas";
+  st.geralCup = "prelim"; // regra da organização: a Classificação Geral usa só a fase preliminar do Confronto
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
@@ -1546,8 +1546,8 @@ function bracketCard() {
 /* Soma a pontuação da Arena Livre com os pontos marcados no Confronto
    Direto (balões e saídas do adversário). */
 function cupPointsOf(id) {
-  const onlyPrelim = state.settings.geralCup === "prelim";
-  return state.cup.matches.filter(m => m.status === "done" && (!onlyPrelim || m.stage === "prelim")).reduce((s, m) => s + (m.a === id ? sideScore(m, "a") : 0) + (m.b === id ? sideScore(m, "b") : 0), 0);
+  // Classificação Geral: só a fase preliminar (semifinais, 3º lugar e final não contam)
+  return state.cup.matches.filter(m => m.status === "done" && m.stage === "prelim").reduce((s, m) => s + (m.a === id ? sideScore(m, "a") : 0) + (m.b === id ? sideScore(m, "b") : 0), 0);
 }
 function generalRanking() {
   const fr = freeRanking();
@@ -1563,7 +1563,7 @@ function geral() {
   const ties = reveal ? rk.map((r, i) => i > 0 && rk[i - 1].total === r.total && rk[i - 1].cup === r.cup && rk[i - 1].arena === r.arena) : [];
   main().innerHTML = head("Classificação Geral", "Soma da pontuação da Arena Livre com os pontos marcados no Confronto Direto.", `<button class="btn" onclick="setDisplay('geral');openTelaoWindow()">📺 Mostrar no telão</button><button class="btn" onclick="exportXlsx()">📊 Exportar Excel</button>`, "geral") +
     `<div class="grid g2 mb"><div class="notice"><b>🎈 Arena Livre</b> — ${state.settings.freeRankMode === "melhor" ? "melhor rodada" : "soma das rodadas"} · ${fs.done}/${fs.total} tentativas</div>
-      <div class="notice cup"><b>⚔️ Confronto Direto</b> — pontos marcados (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"}) · ${cs.done}/${cs.total || 0} confrontos</div></div>
+      <div class="notice cup"><b>⚔️ Confronto Direto</b> — saldo da fase preliminar (semifinais, 3º lugar e final não contam) · ${cs.done}/${cs.total || 0} confrontos</div></div>
     ${fs.done < fs.total || !cs.total || cs.done < cs.total ? `<div class="notice warn mb">Classificação parcial — ainda há provas a disputar.</div>` : ""}
     <div class="card"><div class="card-head"><h2>Classificação Geral</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
@@ -1881,7 +1881,7 @@ function resultSheets() {
       ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
       ["Confronto Direto — pontuação", `${rulesCup()} · ${rulesCupTime()} · classificação pelo saldo de pontos`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — classificação", `Saldo de pontos; desempate: ${crits} → decisão da comissão`],
       ["Vencedor - Confronto Direto", champ ? champ.name : "A definir"], ["2º lugar - Confronto Direto", vice ? vice.name : "A definir"],
-      ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (${state.settings.geralCup === "prelim" ? "somente fase preliminar" : "todas as fases"})`],
+      ["Classificação Geral — critério", `Arena Livre + pontos marcados no Confronto Direto (somente fase preliminar; semifinais, 3º lugar e final não contam)`],
       ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
     { name: "Equipes", rows: [["Nº", "Equipe", "Escola", "Robô", "Professor(a)", "Integrantes", "Cor Arena Livre (nº)", "Cor Arena Livre"],
       ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
@@ -2085,7 +2085,6 @@ function config() {
               [2, 4, 6].filter(k => k < N - 1).map(k => `<option value="${k}" ${s.cupGames === k ? "selected" : ""}>${N * k / 2} confrontos · ${k} jogos por equipe</option>`).join(""); })()}</select>
           <p class="muted small">Calculado com as ${teams().length} equipes cadastradas.</p>
           ${prelims().length ? `<p class="muted small">A fase preliminar atual tem ${prelims().length} confrontos. A mudança vale ao gerar a fase preliminar novamente.</p>` : ""}</div>
-        <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)"><option value="todas" ${s.geralCup === "todas" ? "selected" : ""}>Todas as fases (preliminar + semifinal + final)</option><option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Somente fase preliminar</option></select></div>
       </div>${balloonEstimate("cup")}<p class="muted small mt-s">Padrão: todos contra todos · Round 1 2 min · intervalo 2 min · Round 2 1 min · +100 / +30 · classificação pelo saldo. Tempos novos valem a partir do próximo round; pontos, para as próximas marcações.</p></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>

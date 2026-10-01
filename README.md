@@ -18,7 +18,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 | **Cores** | Cores dos balões (até 8), sem número: o número que aparece no círculo da cor é sempre a numeração sorteada da equipe. O sistema começa com 3 (Azul, Preto, Laranja); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e Vencedor - Confronto Direto. |
-| **Classificação Geral** | Soma da Arena Livre com os pontos marcados no Confronto Direto (todas as fases, ou só a preliminar, em Configurações). |
+| **Classificação Geral** | Soma da Arena Livre com o saldo (pontos marcados) da fase preliminar do Confronto Direto. Semifinais, 3º lugar e final não contam. |
 | **Cronograma** | Programação do dia: incluir, editar e excluir atividades (horário, atividade e detalhamento). A atividade em andamento é destacada pelo relógio, aparece no Início e pode ser exibida no telão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
 | **Config.** | Rodadas e tempo da Arena Livre, critérios de desempate, **planilha Excel**, backup (JSON) e reinício. |
@@ -34,7 +34,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - Classificação por soma das rodadas (ou melhor rodada, em Configurações). Ela é separada da classificação do Confronto Direto.
 
 ## Classificação Geral
-- **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + pontos marcados no Confronto Direto (+100 por balão, +30 por saída do adversário).
+- **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + saldo (pontos marcados) da **fase preliminar** do Confronto Direto (+100 por balão, +30 por saída do adversário). Semifinais, 3º lugar e final não contam.
 - **Desempate:** mais pontos no Confronto Direto, depois mais pontos na Arena Livre. Persistindo, decisão da comissão.
 - O Vencedor - Confronto Direto é o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
