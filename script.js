@@ -256,7 +256,9 @@ function normalize(raw) {
   }
   s.schedV = 3;
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
-  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal };
+  const an = s.display?.anim;
+  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal,
+    anim: an && ["numeros", "cores"].includes(an.kind) && Array.isArray(an.order) ? { kind: an.kind, at: num(an.at, 0), order: an.order.map(sid).filter(id => ids.has(id)) } : null };
   s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "telao", "config"].includes(s.view) ? s.view : "inicio";
   return s;
 }
@@ -592,8 +594,10 @@ function drawNumbers() {
   if (!teams().length) return warn("Cadastre as equipes primeiro.");
   const note = state.cup.matches.length ? "\n\nOs confrontos já gerados NÃO mudam; para usar a nova numeração, gere a fase preliminar novamente." : "";
   if (!confirm("Sortear a numeração de todas as equipes?" + note)) return;
+  const order = sortedTeams().map(t => t.id); // ordem dos cards no "antes" = ordem da revelação
   const nums = shuffle(teams().map((_, i) => i + 1));
   teams().forEach((t, i) => { t.number = nums[i]; });
+  startDrawAnim("numeros", order);
   logEv(`Numeração sorteada: ${sortedTeams().map(t => `${pad2(t.number)} ${t.name}`).join(", ")}`);
   save(); toast("Numeração sorteada"); render();
 }
@@ -686,6 +690,7 @@ function drawColors() {
   while (pool.length < teams().length) pool = pool.concat(shuffle(state.colors));
   state.free.draws = {};
   sortedTeams().forEach((t, i) => { state.free.draws[t.id] = snap(pool[i]); });
+  startDrawAnim("cores", sortedTeams().map(t => t.id));
   logEv(`Cores sorteadas: ${sortedTeams().map(t => `${t.name} = ${state.free.draws[t.id].name}`).join(", ")}`);
   save(); toast(teams().length > state.colors.length ? `Cores sorteadas (${state.colors.length} cores para ${teams().length} equipes: algumas se repetem)` : "Cores sorteadas — valem para todas as rodadas"); render();
 }
@@ -693,6 +698,7 @@ function drawMissing() {
   if (!state.colors.length) { warn("Cadastre as cores antes."); return nav("cores"); }
   const used = new Set(Object.values(state.free.draws).map(c => c.id));
   const free = shuffle(state.colors.filter(c => !used.has(c.id)));
+  startDrawAnim("cores", sortedTeams().filter(t => !drawOf(t.id)).map(t => t.id));
   sortedTeams().filter(t => !drawOf(t.id)).forEach((t, i) => { state.free.draws[t.id] = snap(free[i] || state.colors[Math.floor(Math.random() * state.colors.length)]); });
   save(); toast("Cores sorteadas para as equipes sem cor"); render();
 }
@@ -1467,19 +1473,72 @@ function sceneGeral() {
 }
 
 /* ============================ TELÃO ============================ */
-// Telão dos sorteios: mostra o ANTES (Equipe XX / sem cor) e, ao sortear, atualiza na hora com o DEPOIS
+/* ---- Telão dos sorteios: ANTES (Equipe XX / sem cor) → animação → DEPOIS ----
+   Contagem 3, 2, 1; depois uma equipe a cada 1,5 s: "roleta" por 1 s e para no resultado (bipe curto),
+   bipe longo na última. A linha do tempo usa o horário do sorteio, então telões em outros PCs ficam juntos. */
+const ANIM = { count: 3000, step: 1500, spin: 1000 };
+function startDrawAnim(kind, order) {
+  state.display.anim = order.length ? { kind, at: Date.now(), order } : null;
+  if (order.length) state.display.mode = kind;
+}
+function drawAnim(kind) {
+  const a = state.display.anim; if (!a || a.kind !== kind || !a.order.length) return null;
+  const t = now() - a.at, t0 = ANIM.count, end = t0 + a.order.length * ANIM.step;
+  if (t < 0 || t > end + 4000) return null; // terminou há tempo (ou relógio estranho): mostra o resultado
+  const st = id => { const i = a.order.indexOf(id); if (i < 0) return "done"; const s = t0 + i * ANIM.step; return t < s ? "wait" : t < s + ANIM.spin ? "spin" : t < s + ANIM.step ? "just" : "done"; };
+  return { a, t, t0, end, st, count: t < t0 ? Math.ceil((t0 - t) / 1000) : 0, revealed: a.order.filter(id => ["just", "done"].includes(st(id))).length, finished: t >= end };
+}
+function animSub(an, total, idle, doneTxt) {
+  if (!an) return null;
+  if (an.count) return `Sorteio começando em ${an.count}…`;
+  return an.finished ? doneTxt : `Sorteando… ${Math.min(an.revealed + 1, total)} de ${total}`;
+}
 function sceneNumbers() {
-  const list = sortedTeams(), done = list.length && list.every(t => t.number);
-  return `<div class="tv tv-rank tv-draw"><div class="tv-mode">🎲 SORTEIO DA NUMERAÇÃO</div><div class="tv-draw-sub">${done ? "Resultado do sorteio" : list.some(t => t.number) ? "Sorteio em andamento…" : "Aguardando o sorteio…"}</div>
-    <div class="tv-draw-grid">${list.map(t => `<div class="tv-dc ${t.number ? "got" : ""}"><span class="tv-num">${noLabel(t)}</span><span class="n">${esc(t.name)}<small>${esc(schoolText(t))}</small></span></div>`).join("")}</div></div>`;
+  const an = drawAnim("numeros");
+  // durante a animação, os cards ficam na ordem do "antes"; no fim, em ordem 01 a 07
+  const list = an && !(an.finished && an.t > an.end + 2500) ? [...an.a.order.map(findTeam).filter(Boolean), ...sortedTeams().filter(t => !an.a.order.includes(t.id))] : sortedTeams();
+  const done = list.length && list.every(t => t.number), n = list.length;
+  const sub = animSub(an, an?.a.order.length, "", "Resultado do sorteio") || (done ? "Resultado do sorteio" : list.some(t => t.number) ? "Sorteio em andamento…" : "Aguardando o sorteio…");
+  const card = t => {
+    const s = an ? an.st(t.id) : (t.number ? "done" : "none");
+    const shown = s === "wait" || s === "none" || an?.count ? "XX" : s === "spin" ? pad2(1 + Math.floor(an.t / 90 + t.name.length) % Math.max(n, 2)) : noLabel(t);
+    const cls = an?.count ? "wait" : s === "spin" ? "cur spin" : s === "just" ? "cur got" : s === "done" ? "got" : s === "wait" ? "wait" : "";
+    return `<div class="tv-dc ${cls}"><span class="tv-num">${shown}</span><span class="n">${esc(t.name)}<small>${esc(schoolText(t))}</small></span></div>`;
+  };
+  return `<div class="tv tv-rank tv-draw"><div class="tv-mode">🎲 SORTEIO DA NUMERAÇÃO</div><div class="tv-draw-sub">${sub}</div>
+    <div class="tv-draw-grid">${list.map(card).join("")}</div>${an?.count ? `<div class="tv-count">${an.count}</div>` : ""}</div>`;
 }
 function sceneColors() {
-  const list = sortedTeams(), any = list.some(t => drawOf(t.id)), all = list.length && list.every(t => drawOf(t.id));
-  const groups = all ? sortedColors().map(c => ({ c, ts: list.filter(t => drawOf(t.id)?.id === c.id) })).filter(g => g.ts.length) : [];
-  return `<div class="tv tv-rank tv-draw"><div class="tv-mode arena">🎨 SORTEIO DAS CORES · ARENA LIVRE</div><div class="tv-draw-sub">${all ? "Resultado do sorteio · a cor vale para todas as rodadas" : any ? "Sorteio em andamento…" : "Aguardando o sorteio…"}</div>
-    <div class="tv-draw-grid">${list.map(t => { const c = drawOf(t.id); return `<div class="tv-dc ${c ? "got" : ""}">${c ? `<span class="tv-dot big" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="tv-dot big none">?</span>`}<span class="n">${esc(t.name)}<small>${c ? esc(c.name) : "sem cor"}</small></span></div>`; }).join("")}</div>
-    ${groups.length ? `<div class="tv-groups">${groups.map(g => `<div class="tv-group"><span class="tv-dot" style="--c:${esc(g.c.hex)};--t:${textOn(g.c.hex)}"></span><b>${esc(g.c.name)}:</b> ${g.ts.map(t => esc(t.name)).join(" · ")}</div>`).join("")}</div>` : ""}</div>`;
+  const an = drawAnim("cores"), list = sortedTeams(), cols = sortedColors();
+  const all = list.length && list.every(t => drawOf(t.id)), any = list.some(t => drawOf(t.id));
+  const showGroups = all && (!an || an.finished);
+  const groups = showGroups ? cols.map(c => ({ c, ts: list.filter(t => drawOf(t.id)?.id === c.id) })).filter(g => g.ts.length) : [];
+  const sub = animSub(an, an?.a.order.length, "", "Resultado do sorteio · a cor vale para todas as rodadas") || (all ? "Resultado do sorteio · a cor vale para todas as rodadas" : any ? "Sorteio em andamento…" : "Aguardando o sorteio…");
+  const card = t => {
+    const real = drawOf(t.id), s = an ? an.st(t.id) : (real ? "done" : "none");
+    const c = s === "spin" && cols.length ? cols[Math.floor(an.t / 140 + t.name.length) % cols.length] : (s === "done" || s === "just") && !an?.count ? real : null;
+    const cls = an?.count ? "wait" : s === "spin" ? "cur spin" : s === "just" ? "cur got" : s === "done" ? (real ? "got" : "") : s === "wait" ? "wait" : "";
+    return `<div class="tv-dc ${cls}">${c ? `<span class="tv-dot big" style="--c:${esc(c.hex)};--t:${textOn(c.hex)}">${numIn(t)}</span>` : `<span class="tv-dot big none">?</span>`}<span class="n">${esc(t.name)}<small>${s === "spin" ? "sorteando…" : c ? esc(c.name) : "sem cor"}</small></span></div>`;
+  };
+  return `<div class="tv tv-rank tv-draw"><div class="tv-mode arena">🎨 SORTEIO DAS CORES · ARENA LIVRE</div><div class="tv-draw-sub">${sub}</div>
+    <div class="tv-draw-grid">${list.map(card).join("")}</div>
+    ${groups.length ? `<div class="tv-groups">${groups.map(g => `<div class="tv-group"><span class="tv-dot" style="--c:${esc(g.c.hex)};--t:${textOn(g.c.hex)}"></span><b>${esc(g.c.name)}:</b> ${g.ts.map(t => esc(t.name)).join(" · ")}</div>`).join("")}</div>` : ""}
+    ${an?.count ? `<div class="tv-count">${an.count}</div>` : ""}</div>`;
 }
+// Roda a cada ~90 ms enquanto há animação: redesenha a cena do sorteio e toca os bipes
+function animTick() {
+  const a = state.display.anim; if (!a) return;
+  const an = drawAnim(a.kind); if (!an) return;
+  // bipes: contagem (curto), cada revelação (agudo curto) e a última (longo)
+  const key = k => `anim:${a.at}:${k}`, hit = k => { if (beeped.has(key(k))) return false; beeped.add(key(k)); return true; };
+  if (an.count && an.t > 0 && hit("c" + an.count)) beep("warn");
+  a.order.forEach((id, i) => { const s = an.t0 + i * ANIM.step + ANIM.spin; if (an.t >= s && an.t < s + 1200 && hit("r" + i)) beep(i === a.order.length - 1 ? "end" : "start"); });
+  if (state.display.mode !== a.kind) return;
+  const html = telaoScene();
+  ["tvScene"].forEach(idv => { const el = document.getElementById(idv); if (el && (TELAO_WINDOW || document.body.classList.contains("telao-full"))) el.innerHTML = html; });
+  const pv = document.querySelector(".tv-preview .tv-frame"); if (pv && !TELAO_WINDOW) pv.innerHTML = html;
+}
+setInterval(animTick, 90);
 function telaoScene() {
   const d = state.display, cur = state.free.current, live = liveMatch();
   if (d.mode === "numeros") return sceneNumbers();

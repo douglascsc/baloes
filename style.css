@@ -457,10 +457,19 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .tv-dc .n{display:flex;flex-direction:column;font-size:2cqw;font-weight:900;line-height:1.15}
 .tv-dc .n small{font-size:1.25cqw;color:#5f6b64;font-weight:600}
 .tv-num{min-width:6.4cqw;height:5.2cqw;border-radius:1cqw;display:grid;place-items:center;font-size:3.2cqw;font-weight:950;background:#e6ebe8;color:#9aa49e;border:.2cqw dashed #b9c2bd;flex-shrink:0}
-.tv-dc.got{background:var(--green-l);border-color:#bfe3cb;animation:tvGot .45s ease-out}
+.tv-dc.got{background:var(--green-l);border-color:#bfe3cb}
 .tv-dc.got .tv-num{background:var(--green);color:#fff;border-style:solid;border-color:var(--green)}
 .tv-dot.big{width:5.2cqw;height:5.2cqw;font-size:2.2cqw}
 .tv-dot.none{background:#e6ebe8;color:#9aa49e;border-style:dashed}
 .tv-groups{display:flex;flex-wrap:wrap;justify-content:center;gap:.8cqw 2.4cqw;margin-top:1.2cqw;font-size:1.5cqw}
 .tv-group{display:flex;align-items:center;gap:.6cqw}.tv-group .tv-dot{width:2cqw;height:2cqw}
 @keyframes tvGot{from{transform:scale(.92);opacity:.4}to{transform:none;opacity:1}}
+/* Animação do sorteio no telão: card da vez destacado, os que faltam apagados, contagem 3-2-1 */
+.tv-draw{position:relative}
+.tv-dc{transition:none}
+.tv-dc.wait{opacity:.45}
+.tv-dc.cur{transform:scale(1.06);border-color:var(--yellow,#f4b400);box-shadow:0 0 0 .35cqw rgba(244,180,0,.35),0 1cqw 2.4cqw rgba(0,0,0,.12);background:#fffdf3;position:relative;z-index:1}
+.tv-dc.cur.got{background:var(--green-l);border-color:var(--green);box-shadow:0 0 0 .4cqw rgba(21,148,71,.3),0 1cqw 2.4cqw rgba(0,0,0,.12)}
+.tv-dc.spin .tv-num{background:#fff3c4;color:#8a6d00;border-style:solid;border-color:#f4b400}
+.tv-dc.spin .tv-dot.big{box-shadow:0 0 0 .3cqw #fff,0 0 0 .6cqw #f4b400}
+.tv-count{position:absolute;inset:0;display:grid;place-items:center;font-size:22cqw;font-weight:950;color:var(--green);text-shadow:0 1cqw 3cqw rgba(0,0,0,.18);pointer-events:none;background:rgba(255,255,255,.55)}
