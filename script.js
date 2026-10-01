@@ -101,7 +101,6 @@ function defaultSettings() {
     freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "5", freeBeepEnd: true,
     cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10", cupBeepEnd: true, cupBeepBreak: false,
     defV: 1,
-    // Ordem definida pela organização: saldo de pontos → confronto direto → pontos marcados.
     // Classificação pelo SALDO de pontos (não há pontos de vitória/empate/derrota).
     // Desempate definido pela organização: confronto direto → número de vitórias → numeração do sorteio → decisão da comissão
     tiebreak: [{ key: "direto", on: true }, { key: "vitorias", on: true }, { key: "sorteio", on: true },
