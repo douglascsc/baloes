@@ -1893,7 +1893,8 @@ function config() {
       <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam em pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
       <details class="card fold"><summary><b>📜 Histórico de alterações</b> <span class="muted small">(${state.log.length})</span></summary>
         <div class="log mt-s">${state.log.slice(-300).reverse().map(x => `<div class="log-item"><span><b>${esc(fmtDate(x.at))}</b> · ${esc(x.msg)}</span></div>`).join("") || `<div class="muted small">Nenhum registro ainda.</div>`}</div>
-        <p class="muted small mt-s">Registro de sorteios, resultados, correções, anulações, repetições e ajustes. Também vai na planilha Excel (aba Histórico).</p></details>
+        <p class="muted small mt-s">Registro de sorteios, resultados, correções, anulações, repetições e ajustes. Também vai na planilha Excel (aba Histórico).</p>
+        ${state.log.length ? `<div class="actions mt-s"><button class="btn small danger" onclick="clearLog()">🗑 Limpar histórico</button></div>` : ""}</details>
       <div class="card"><h2>⚠️ Reiniciar</h2><div class="actions col">
         <button class="btn danger" onclick="resetFree()">Zerar Arena Livre (apaga tentativas)</button>
         ${prelims().length ? `<button class="btn danger" onclick="generatePrelim()">↻ Gerar novamente a fase preliminar (apaga confrontos e resultados)</button>` : ""}
@@ -1931,6 +1932,11 @@ function importData(e) {
 }
 function resetFree() { if (!confirm("Apagar TODAS as tentativas da Arena Livre?")) return; state.free = { current: null, attempts: [], draws: {} }; logEv("Arena Livre zerada (tentativas e cores apagadas)"); save(); toast("Arena Livre zerada"); render(); }
 function resetCup() { if (!confirm("Apagar TODOS os confrontos e resultados?")) return; state.cup = { matches: [], liveId: null, manualOrder: [] }; logEv("Confronto Direto zerado"); save(); toast("Confronto Direto zerado"); render(); }
+// Apaga só o histórico (ex.: registros dos testes antes da competição); dados da competição não mudam
+function clearLog() {
+  if (!confirm(`Apagar os ${state.log.length} registros do histórico?\nEquipes, resultados e configurações NÃO mudam.\nSe quiser guardar, exporte a planilha antes.`)) return;
+  state.log = []; logEv("Histórico limpo"); save(); toast("Histórico limpo"); render();
+}
 function resetAll() { if (!confirm("Apagar tudo e voltar ao cadastro inicial das equipes?")) return; const log = state.log; state = normalize(fresh()); state.log = log; logEv("Competição reiniciada (tudo apagado, cadastro inicial restaurado)"); save(); toast("Competição reiniciada"); render(); }
 
 /* ============================ MODAL / EVENTOS GLOBAIS ============================ */
