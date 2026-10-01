@@ -784,6 +784,34 @@ function freeRepeat() {
   cur.events = []; cur.timer = newTimer(state.settings.freeSeconds);
   save(); toast("Tentativa zerada para repetição"); render();
 }
+// Corrige uma tentativa já registrada: o operador informa as quantidades certas de cada marcação
+function freeEdit(id) {
+  const a = state.free.attempts.find(x => x.id === id); if (!a) return;
+  const evs = freeEvents(), cnt = l => a.events.filter(e => e.label === l).length;
+  openModal(`<h2>Corrigir tentativa</h2><p class="muted">${esc(teamName(a.teamId))} · Rodada ${a.round} · atual: <b>${signed(attemptTotal(a))}</b></p>
+    <form id="freeEditF"><div class="form-grid">${evs.map((e, i) => `<div><label>${e.icon} ${esc(e.label)} (${e.short})</label><input name="e${i}" type="number" min="0" max="99" value="${cnt(e.label)}"></div>`).join("")}</div>
+    <p class="mt-s">Nova pontuação: <b id="freeEditTot"></b></p>
+    <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
+  const F = document.getElementById("freeEditF");
+  const counts = () => evs.map((_, i) => Math.max(0, Math.min(99, Math.round(num(F.elements["e" + i].value, 0)))));
+  const build = () => {
+    const out = [];
+    evs.forEach((e, i) => {
+      const keep = a.events.filter(x => x.label === e.label).slice(0, counts()[i]);
+      while (keep.length < counts()[i]) keep.push({ id: uid(), pts: e.pts, label: e.label, t: "correção", seq: Date.now() + keep.length });
+      out.push(...keep);
+    });
+    return out.sort((x, y) => x.seq - y.seq);
+  };
+  const upd = () => { document.getElementById("freeEditTot").textContent = signed(attemptTotal({ ...a, events: build() })); };
+  F.oninput = upd; upd();
+  F.onsubmit = ev => {
+    ev.preventDefault(); const before = attemptTotal(a);
+    a.events = build();
+    logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}`);
+    save(); closeModal(); toast("Tentativa corrigida"); render();
+  };
+}
 function freeVoid(id) {
   const a = state.free.attempts.find(x => x.id === id); if (!a) return;
   const reason = prompt(`Anular a tentativa de ${teamName(a.teamId)} na Rodada ${a.round} (${signed(attemptTotal(a))})?\nA equipe volta para a fila dessa rodada.\n\nMotivo (ex.: falha técnica):`, "");
@@ -908,11 +936,11 @@ function freeRankingCard() {
       ${reveal ? `<td class="pos">${i + 1}º</td>` : ""}<td>${teamCell(x.team)}</td>
       ${x.scores.map(v => `<td class="num">${v === null ? `<span class="muted">—</span>` : hide(signed(v), v < 0 ? "minus" : "")}</td>`).join("")}
       <td class="num total">${x.done ? hide(signed(x.total), x.total < 0 ? "minus" : "") : `<span class="muted">—</span>`}</td></tr>`).join("");
-  const hist = [...state.free.attempts].sort((a, b) => str(b.at).localeCompare(str(a.at))).map(a => `<div class="log-item"><span><b>${esc(teamName(a.teamId, "Equipe removida"))}</b> · Rodada ${a.round} · ${colorChip(a.color)}</span><b>${hide(signed(attemptTotal(a)))}</b><button class="btn tiny danger" onclick="freeVoid('${esc(a.id)}')">Anular</button></div>`).join("");
+  const hist = [...state.free.attempts].sort((a, b) => str(b.at).localeCompare(str(a.at))).map(a => `<div class="log-item"><span><b>${esc(teamName(a.teamId, "Equipe removida"))}</b> · Rodada ${a.round} · ${colorChip(a.color)}</span><b>${hide(signed(attemptTotal(a)))}</b><button class="btn tiny" onclick="freeEdit('${esc(a.id)}')">✏️ Corrigir</button><button class="btn tiny danger" onclick="freeVoid('${esc(a.id)}')">Anular</button></div>`).join("");
   return `<div class="card mt"><div class="card-head"><h2>🏆 Classificação da Arena Livre</h2>${eyeBtn()}</div>
     ${reveal ? "" : `<p class="muted small">Pontuação oculta — equipes listadas pela numeração. Clique no 👁️ para revelar.</p>`}
     <div class="table-wrap"><table class="table" aria-label="Classificação da Arena Livre"><thead><tr>${reveal ? "<th>Pos.</th>" : ""}<th>Equipe</th>${Array.from({ length: R }, (_, i) => `<th class="num">R${i + 1}</th>`).join("")}<th class="num">${state.settings.freeRankMode === "melhor" ? "Melhor" : "Total"}</th></tr></thead><tbody>${rows || `<tr><td colspan="${R + (reveal ? 3 : 2)}">Nenhuma equipe cadastrada.</td></tr>`}</tbody></table></div>
-    <details class="mt-s"><summary class="muted">Histórico de tentativas (${state.free.attempts.length})</summary><div class="log">${hist || `<div class="muted small">Nenhuma tentativa registrada.</div>`}</div></details>
+    <details class="mt-s"><summary class="muted">✏️ Histórico de tentativas — corrigir ou anular (${state.free.attempts.length})</summary><div class="log">${hist || `<div class="muted small">Nenhuma tentativa registrada.</div>`}</div></details>
   </div>`;
 }
 
