@@ -47,12 +47,12 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - **Balões acabaram:** o confronto encerra e vai para a conferência do resultado; se for no Round 1, não há Round 2.
 - **Robô saiu da arena (5.1.2.1 c):** +30 para o adversário e **só o round** encerra. No Round 1, segue para o intervalo e o Round 2 acontece normalmente, com os balões que sobraram. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** reabre um confronto encerrado.
-- **Classificação da fase preliminar: pelo saldo de pontos** (pontos marcados − sofridos). Os pontos de classificação (vitória 3, empate 1, derrota 0, configuráveis) servem só como desempate.
+- **Classificação da fase preliminar: pelo saldo de pontos** (pontos marcados − sofridos). Não há pontos de vitória/empate/derrota; a tabela mostra jogos (J), vitórias (V), empates (E), derrotas (D) e o saldo.
 - **Semifinais** geradas automaticamente: 1º × 4º e 2º × 3º. **Final:** vencedores das semifinais.
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)
-O critério principal é sempre o **saldo de pontos**. Desempate configurável em **Configurações** (ordem e ativação). Padrão: **1. confronto direto → 2. pontos (vitória/empate/derrota) → decisão da comissão**. Pontos marcados, vitórias, resultado da Arena Livre e numeração do sorteio ficam disponíveis, mas desligados.
+O critério principal é sempre o **saldo de pontos**. Desempate configurável em **Configurações** (ordem e ativação). Padrão: **1. confronto direto (quem venceu o jogo entre as empatadas) → 2. número de vitórias → 3. numeração do sorteio (menor número à frente) → decisão da comissão**. Pontos marcados e resultado da Arena Livre ficam disponíveis, mas desligados.
 Se o empate persistir entre os 4 primeiros, a classificação mostra ▲▼ para a Comissão definir a ordem antes de gerar as semifinais.
 **Confira e ajuste os critérios conforme o regulamento oficial.**
 
