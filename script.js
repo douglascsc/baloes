@@ -1301,6 +1301,59 @@ function cancelMatch() {
   }
   state.cup.liveId = null; save(); render();
 }
+// Corrige um confronto já encerrado direto pelos números (funciona mesmo com outro confronto em andamento)
+function cupEdit(id) {
+  const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;
+  const [EB, EX] = matchEvents(), N = cfg().cupBalloons;
+  const cnt = (r, side, ev) => m.rounds[r].events.filter(e => e.side === side && e.label === ev.label).length;
+  const f = (r, side) => `<div class="ce-cell"><b>${esc(teamName(side === "a" ? m.a : m.b))}</b>
+      <label>🎈 Balões do adversário estourados (+${EB.pts})<input type="number" min="0" max="${N}" name="b${r}${side}" value="${cnt(r, side, EB)}"></label>
+      <label>↗ Adversário saiu da arena (+${EX.pts})<input type="number" min="0" max="1" name="x${r}${side}" value="${cnt(r, side, EX)}"></label></div>`;
+  openModal(`<h2>Corrigir confronto</h2><p class="muted">${esc(matchLabel(m))} · ${esc(teamName(m.a))} × ${esc(teamName(m.b))} · atual: <b>${sideScore(m, "a")} × ${sideScore(m, "b")}</b></p>
+    <form id="cupEditF">${[1, 2].map(r => `<h3 class="mt-s">Round ${r}</h3><div class="ce-grid">${f(r, "a")}${f(r, "b")}</div>`).join("")}
+    ${m.stage !== "prelim" ? `<div class="mt-s"><label>Se empatar, vencedor (decisão da comissão)<select name="pick"><option value="${esc(m.a)}" ${m.pick === m.a || m.winner === m.a ? "selected" : ""}>${esc(teamName(m.a))}</option><option value="${esc(m.b)}" ${m.pick === m.b || m.winner === m.b ? "selected" : ""}>${esc(teamName(m.b))}</option></select></label></div>` : ""}
+    <p class="mt-s">Novo placar: <b id="cupEditTot"></b></p>
+    <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
+  const F = document.getElementById("cupEditF");
+  const val = (k, max) => Math.max(0, Math.min(max, Math.round(num(F.elements[k].value, 0))));
+  const total = side => [1, 2].reduce((t, r) => t + val(`b${r}${side}`, N) * EB.pts + val(`x${r}${side}`, 1) * EX.pts, 0);
+  const upd = () => { const a = total("a"), b = total("b"); document.getElementById("cupEditTot").textContent = `${teamName(m.a)} ${a} × ${b} ${teamName(m.b)}${a === b ? (m.stage === "prelim" ? " · empate" : " · empate → decisão da comissão") : ` · vence ${teamName(a > b ? m.a : m.b)}`}`; };
+  F.oninput = upd; upd();
+  F.onsubmit = e => {
+    e.preventDefault();
+    const tb = [1, 2].reduce((t, r) => t + val(`b${r}a`, N), 0), ta = [1, 2].reduce((t, r) => t + val(`b${r}b`, N), 0);
+    if (tb > N || ta > N) return warn(`Cada robô tem ${N} balões no confronto: a soma dos dois rounds não pode passar de ${N}.`);
+    const sa = total("a"), sb = total("b");
+    let winner = sa > sb ? m.a : sb > sa ? m.b : "draw", byDecision = false;
+    if (winner === "draw" && m.stage !== "prelim") { winner = F.elements.pick.value; byDecision = true; }
+    // efeito nas fases seguintes
+    const prev = JSON.stringify({ rounds: m.rounds, winner: m.winner, pick: m.pick, byDecision: m.byDecision }), before = `${sideScore(m, "a")} × ${sideScore(m, "b")}`;
+    const rebuild = r => {
+      const out = [];
+      ["a", "b"].forEach(side => [[EB, val(`b${r}${side}`, N)], [EX, val(`x${r}${side}`, 1)]].forEach(([ev, n]) => {
+        const keep = m.rounds[r].events.filter(x => x.side === side && x.label === ev.label).slice(0, n);
+        while (keep.length < n) keep.push({ id: uid(), side, pts: ev.pts, label: ev.label, t: "correção", seq: Date.now() + out.length + keep.length });
+        out.push(...keep);
+      }));
+      return out.sort((x, y) => x.seq - y.seq);
+    };
+    const newRounds = { 1: { events: rebuild(1) }, 2: { events: rebuild(2) } };
+    const oldRounds = m.rounds, oldWinner = m.winner;
+    m.rounds = newRounds; m.winner = winner;
+    let drop = null;
+    if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim")) {
+      const sd = seeds(), [s1, s2] = semis();
+      const same = !blockingTie(standings()) && s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
+      if (!same) drop = "ko";
+    } else if (m.stage === "semi" && finalMatch() && winner !== oldWinner) drop = "final";
+    if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação da fase preliminar muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a final será apagada e gerada novamente. Continuar?")) { m.rounds = oldRounds; m.winner = oldWinner; return; }
+    if (drop === "ko") state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim");
+    if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final");
+    Object.assign(m, { byDecision, pick: byDecision ? winner : null });
+    logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`}`);
+    void prev; save(); closeModal(); toast("Confronto corrigido"); checkProgress(); render();
+  };
+}
 function reopenMatch(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;
   if (liveMatch()) return warn("Finalize o confronto em andamento antes de corrigir outro.");
@@ -1401,7 +1454,7 @@ function matchRow(m) {
   else if (m.status === "done") chip = `<span class="chip done">✓ Encerrado</span>`;
   else if (nm && nm.id === m.id) chip = `<span class="chip next">Próximo</span>`;
   const act = m.status === "pending" && !live ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>`
-    : m.status === "done" && !live ? `<button class="btn tiny" onclick="reopenMatch('${esc(m.id)}')" title="Corrigir resultado">✏️ Corrigir</button>` : "";
+    : m.status === "done" ? `<button class="btn tiny" onclick="cupEdit('${esc(m.id)}')" title="Corrigir resultado">✏️ Corrigir</button>` : "";
   const w = id => reveal && m.status === "done" && m.winner === id ? "win" : "";
   const sc = side => m.status !== "done" ? "" : reveal ? `<b>${sideScore(m, side)}</b>` : `<span class="score-hidden">••</span>`;
   return `<div class="m-row ${m.status}"><span class="m-no">${m.stage === "prelim" ? m.order : ""}</span>
@@ -1453,7 +1506,7 @@ function bracketCard() {
     const id = m ? m[side] : null, t = findTeam(id), win = m && winnerOf(m) === id && id;
     return `<div class="b-team ${win ? "winner" : ""} ${t ? "" : "ph"}"><span>${t ? esc(t.name) : ph}</span>${m && m.status === "done" ? `<b>${reveal ? sideScore(m, side) : "••"}</b>` : ""}${win ? "<em>✓</em>" : ""}</div>`;
   };
-  const box = (m, title, pa, pb) => `<div class="b-match ${m?.status || ""}"><div class="b-title">${title}${m ? ` · ${m.status === "live" ? "● jogando" : m.status === "done" ? (m.byDecision ? "decisão da comissão" : "encerrada") : "a disputar"}` : ""}</div>${slot(m, "a", pa)}${slot(m, "b", pb)}${m && m.status === "pending" && !liveMatch() ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>` : m && m.status === "done" && !liveMatch() ? `<button class="btn tiny" onclick="reopenMatch('${esc(m.id)}')">✏️ Corrigir</button>` : ""}</div>`;
+  const box = (m, title, pa, pb) => `<div class="b-match ${m?.status || ""}"><div class="b-title">${title}${m ? ` · ${m.status === "live" ? "● jogando" : m.status === "done" ? (m.byDecision ? "decisão da comissão" : "encerrada") : "a disputar"}` : ""}</div>${slot(m, "a", pa)}${slot(m, "b", pb)}${m && m.status === "pending" && !liveMatch() ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>` : m && m.status === "done" ? `<button class="btn tiny" onclick="cupEdit('${esc(m.id)}')">✏️ Corrigir</button>` : ""}</div>`;
   return `<div class="card mt ko"><div class="card-head"><h2>🏅 Fase eliminatória</h2><span class="pill">mata-mata</span></div>
     <div class="bracket">
       <div class="b-col">${box(s1, "Semifinal 1", "1º colocado", "4º colocado")}${box(s2, "Semifinal 2", "2º colocado", "3º colocado")}</div>

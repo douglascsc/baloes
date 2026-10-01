@@ -474,3 +474,7 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .tv-dc.spin .tv-dot.big{box-shadow:0 0 0 .3cqw #fff,0 0 0 .6cqw #f4b400}
 .tv-count{position:absolute;inset:0;display:grid;place-items:center;font-size:22cqw;font-weight:950;color:var(--green);text-shadow:0 1cqw 3cqw rgba(0,0,0,.18);pointer-events:none;background:rgba(255,255,255,.55)}
 .vol-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 10px}.vol-row input[type=range]{flex:1;min-width:160px;accent-color:var(--green)}
+/* Correção de confronto encerrado */
+.ce-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ce-cell{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line2);border-radius:10px;background:var(--soft)}
+.ce-cell label{display:flex;flex-direction:column;gap:4px;font-size:13px}
