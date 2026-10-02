@@ -468,9 +468,16 @@ function cupWO(id) {
     e.preventDefault(); const F = e.target, v = F.elements.wo.value;
     const type = v === "both" ? "both" : v.startsWith("ab:") ? "abandon" : "absent", side = v.slice(-1);
     if (!confirm("Registrar o W.O.? O resultado fica valendo (pode ser corrigido depois com ✏️ Corrigir).")) return;
-    applyWO(m, type, side, F.elements.reason.value, F.elements.pick?.value);
-    save(); closeModal(); toast("W.O. registrado"); checkProgress(); render();
+    woApply(id, type, side, F.elements.reason.value, F.elements.pick?.value);
   };
+}
+// Aplica o W.O. (separado da janela para poder vir do celular do juiz)
+function woApply(id, type, side, reason, pick) {
+  const m = state.cup.matches.find(x => x.id === id); if (!m || m.status === "done" || !["absent", "both", "abandon"].includes(type) || (type !== "both" && !["a", "b"].includes(side))) return;
+  if (type === "abandon" && m.status !== "live") return;
+  if (m.status === "pending" && liveMatch()) return warn("Finalize o confronto em andamento antes.");
+  applyWO(m, type, side, str(reason).slice(0, 200), [m.a, m.b].includes(pick) ? pick : m.a);
+  save(); if (!CMD_RUN) closeModal(); toast("W.O. registrado"); checkProgress(); render();
 }
 // Desclassificação (5.7.6): sai das classificações; jogos ainda não disputados viram W.O. para os adversários
 function disqualify(id) {
@@ -494,10 +501,8 @@ function undoDisqualify(id) {
 function cupEdit(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;
   const [EB, EX] = matchEvents(), N = cfg().cupBalloons, ko = m.stage !== "prelim";
-  // Round 3 aparece se foi jogado ou se o desempate por Round 3 está ligado (fase eliminatória)
   if (!m.rounds[3]) m.rounds[3] = { events: [] };
-  const R3 = ko && (m.r3 || m.rounds[3].events.length || cfg().koR3 !== "off"), RS = R3 ? [1, 2, 3] : [1, 2];
-  const r3Mode = m.r3 || cfg().koR3;
+  const { R3, RS, r3Mode } = cupEditShape(m);
   const cnt = (r, side, ev) => m.rounds[r].events.filter(e => e.side === side && e.label === ev.label).length;
   const f = (r, side) => `<div class="ce-cell"><b>${esc(teamName(side === "a" ? m.a : m.b))}</b>
       <label>🎈 Balões do adversário estourados (+${EB.pts})<input type="number" min="0" max="${N}" name="b${r}${side}" value="${cnt(r, side, EB)}"></label>
@@ -509,54 +514,75 @@ function cupEdit(id) {
     <p class="mt-s">Novo placar: <b id="cupEditTot"></b></p>${fixFields()}
     <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   const F = document.getElementById("cupEditF");
-  const val = (k, max) => F.elements[k] ? Math.max(0, Math.min(max, Math.round(num(F.elements[k].value, 0)))) : 0;
+  // valores do formulário (objeto simples: vai igual para o note quando a correção vem do celular)
+  const vals = () => { const v = {}; RS.forEach(r => ["a", "b"].forEach(sd => { v[`b${r}${sd}`] = num(F.elements[`b${r}${sd}`]?.value, 0); v[`x${r}${sd}`] = num(F.elements[`x${r}${sd}`]?.value, 0); })); if (F.elements.pick) v.pick = F.elements.pick.value; return v; };
+  const upd = () => { const c = cupEditCalc(m, vals()), d = c.decide(); document.getElementById("cupEditTot").textContent = `${teamName(m.a)} ${c.total("a")} × ${c.total("b")} ${teamName(m.b)} · ${d.winner === "draw" ? "empate" : `vence ${teamName(d.winner)}${d.byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}`; };
+  F.oninput = upd; upd();
+  F.onsubmit = e => {
+    e.preventDefault();
+    const why = fixRead(F); if (why === null) return;
+    const v = vals(), c = cupEditCalc(m, v);
+    if (c.balloons("a") > N || c.balloons("b") > N) return warn(`Cada robô tem ${N} balões no confronto: a soma dos rounds não pode passar de ${N}.`);
+    cupEditApply(id, v, why);
+  };
+}
+function cupEditShape(m) {
+  const ko = m.stage !== "prelim", R3 = ko && !!(m.r3 || m.rounds[3]?.events.length || cfg().koR3 !== "off");
+  return { ko, R3, RS: R3 ? [1, 2, 3] : [1, 2], r3Mode: m.r3 || cfg().koR3 };
+}
+// cálculo da correção a partir dos números informados (mesma regra do jogo: R1+R2; empate → Round 3; ainda empatado → comissão)
+function cupEditCalc(m, v) {
+  const [EB, EX] = matchEvents(), N = cfg().cupBalloons, { ko, R3, RS, r3Mode } = cupEditShape(m);
+  const val = (k, max) => Math.max(0, Math.min(max, Math.round(num(v[k], 0))));
   const rs = (side, r) => val(`b${r}${side}`, N) * EB.pts + val(`x${r}${side}`, 1) * EX.pts;
   const total = side => RS.reduce((t, r) => t + rs(side, r), 0);
-  // quem vence com os números do formulário (mesma regra do jogo: R1+R2; empate → Round 3; ainda empatado → comissão)
+  // balões estourados POR side (= balões do adversário que caíram)
+  const balloons = side => RS.reduce((t, r) => t + val(`b${r}${side === "a" ? "b" : "a"}`, N), 0);
+  const pick = [m.a, m.b].includes(v.pick) ? v.pick : m.a;
   const decide = () => {
     const a12 = rs("a", 1) + rs("a", 2), b12 = rs("b", 1) + rs("b", 2);
     if (!ko) { const a = total("a"), b = total("b"); return { winner: a > b ? m.a : b > a ? m.b : "draw" }; }
     if (a12 !== b12) return { winner: a12 > b12 ? m.a : m.b };
     const r3played = R3 && (m.r3 || ["a", "b"].some(sd => val(`b3${sd}`, N) || val(`x3${sd}`, 1)));
     if (r3played && r3Mode === "points" && rs("a", 3) !== rs("b", 3)) return { winner: rs("a", 3) > rs("b", 3) ? m.a : m.b, r3: "points" };
-    if (r3played && r3Mode === "sudden") return { winner: F.elements.pick.value, r3: "sudden" };
-    return { winner: F.elements.pick.value, byDecision: true, r3: r3played ? r3Mode : undefined };
+    if (r3played && r3Mode === "sudden") return { winner: pick, r3: "sudden" };
+    return { winner: pick, byDecision: true, r3: r3played ? r3Mode : undefined };
   };
-  const upd = () => { const a = total("a"), b = total("b"), d = decide(); document.getElementById("cupEditTot").textContent = `${teamName(m.a)} ${a} × ${b} ${teamName(m.b)} · ${d.winner === "draw" ? "empate" : `vence ${teamName(d.winner)}${d.byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}`; };
-  F.oninput = upd; upd();
-  F.onsubmit = e => {
-    e.preventDefault();
-    const why = fixRead(F); if (why === null) return;
-    const tb = RS.reduce((t, r) => t + val(`b${r}a`, N), 0), ta = RS.reduce((t, r) => t + val(`b${r}b`, N), 0);
-    if (tb > N || ta > N) return warn(`Cada robô tem ${N} balões no confronto: a soma dos rounds não pode passar de ${N}.`);
-    const sa = total("a"), sb = total("b"), d = decide(), winner = d.winner, byDecision = !!d.byDecision;
-    const before = `${sideScore(m, "a")} × ${sideScore(m, "b")}`;
-    const rebuild = r => {
-      const out = [];
-      ["a", "b"].forEach(side => [[EB, val(`b${r}${side}`, N)], [EX, val(`x${r}${side}`, 1)]].forEach(([ev, n]) => {
-        const keep = m.rounds[r].events.filter(x => x.side === side && x.label === ev.label).slice(0, n);
-        while (keep.length < n) keep.push({ id: uid(), side, pts: ev.pts, label: ev.label, t: "correção", seq: Date.now() + out.length + keep.length });
-        out.push(...keep);
-      }));
-      return out.sort((x, y) => x.seq - y.seq);
-    };
-    const newRounds = { 1: { events: rebuild(1) }, 2: { events: rebuild(2) }, 3: { events: R3 ? rebuild(3) : [] } };
-    const old = { rounds: m.rounds, winner: m.winner, r3: m.r3, r3Winner: m.r3Winner };
-    m.rounds = newRounds; m.winner = winner;
-    let drop = null;
-    if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim")) {
-      const sd = seeds(), [s1, s2] = semis();
-      const same = s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
-      if (!same) drop = "ko";
-    } else if (m.stage === "semi" && (finalMatch() || thirdMatch()) && winner !== old.winner) drop = "final";
-    if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a disputa de 3º lugar e a final serão apagadas e geradas novamente. Continuar?")) { Object.assign(m, old); return; }
-    if (drop === "ko") state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim");
-    if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final" && x.stage !== "third");
-    Object.assign(m, { byDecision, pick: byDecision ? winner : null, r3: d.r3 || (ko && newRounds[3].events.length ? r3Mode : undefined), r3Winner: d.r3 === "sudden" ? winner : undefined, wo: undefined });
-    if (m.r3 === "off") m.r3 = undefined;
-    logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}. Motivo: ${why}`);
-    save(); closeModal(); toast("Confronto corrigido"); resyncSemis(); checkProgress(); render();
+  const rebuild = r => {
+    const out = [];
+    ["a", "b"].forEach(side => [[EB, val(`b${r}${side}`, N)], [EX, val(`x${r}${side}`, 1)]].forEach(([ev, n]) => {
+      const keep = (m.rounds[r]?.events || []).filter(x => x.side === side && x.label === ev.label).slice(0, n);
+      while (keep.length < n) keep.push({ id: uid(), side, pts: ev.pts, label: ev.label, t: "correção", seq: Date.now() + out.length + keep.length });
+      out.push(...keep);
+    }));
+    return out.sort((x, y) => x.seq - y.seq);
   };
+  return { ko, R3, RS, r3Mode, total, balloons, decide, rebuild };
+}
+// Aplica a correção (separada da janela para poder vir do celular do juiz)
+function cupEditApply(id, v, why) {
+  const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done" || !v || typeof v !== "object" || !str(why)) return;
+  if (!m.rounds[3]) m.rounds[3] = { events: [] };
+  const N = cfg().cupBalloons, c = cupEditCalc(m, v);
+  if (c.balloons("a") > N || c.balloons("b") > N) return warn(`Cada robô tem ${N} balões no confronto: a soma dos rounds não pode passar de ${N}.`);
+  const sa = c.total("a"), sb = c.total("b"), d = c.decide(), winner = d.winner, byDecision = !!d.byDecision;
+  const before = `${sideScore(m, "a")} × ${sideScore(m, "b")}`;
+  const newRounds = { 1: { events: c.rebuild(1) }, 2: { events: c.rebuild(2) }, 3: { events: c.R3 ? c.rebuild(3) : [] } };
+  const old = { rounds: m.rounds, winner: m.winner, r3: m.r3, r3Winner: m.r3Winner };
+  m.rounds = newRounds; m.winner = winner;
+  let drop = null;
+  if (m.stage === "prelim" && state.cup.matches.some(x => x.stage !== "prelim")) {
+    const sd = seeds(), [s1, s2] = semis();
+    const same = s1 && s2 && s1.a === sd[0] && s1.b === sd[3] && s2.a === sd[1] && s2.b === sd[2];
+    if (!same) drop = "ko";
+  } else if (m.stage === "semi" && (finalMatch() || thirdMatch()) && winner !== old.winner) drop = "final";
+  if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a disputa de 3º lugar e a final serão apagadas e geradas novamente. Continuar?")) { Object.assign(m, old); return; }
+  if (drop === "ko") state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim");
+  if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final" && x.stage !== "third");
+  Object.assign(m, { byDecision, pick: byDecision ? winner : null, r3: d.r3 || (c.ko && newRounds[3].events.length ? c.r3Mode : undefined), r3Winner: d.r3 === "sudden" ? winner : undefined, wo: undefined });
+  if (m.r3 === "off") m.r3 = undefined;
+  logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}. Motivo: ${str(why)}`);
+  save(); if (!CMD_RUN) closeModal(); toast("Confronto corrigido"); resyncSemis(); checkProgress(); render();
 }
 function reopenMatch(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;

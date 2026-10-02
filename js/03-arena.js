@@ -163,24 +163,29 @@ function freeEdit(id) {
     <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   const F = document.getElementById("freeEditF");
   const counts = () => evs.map((_, i) => Math.max(0, Math.min(99, Math.round(num(F.elements["e" + i].value, 0)))));
-  const build = () => {
-    const out = [];
-    evs.forEach((e, i) => {
-      const keep = a.events.filter(x => x.label === e.label).slice(0, counts()[i]);
-      while (keep.length < counts()[i]) keep.push({ id: uid(), pts: e.pts, label: e.label, t: "correção", seq: Date.now() + keep.length });
-      out.push(...keep);
-    });
-    return out.sort((x, y) => x.seq - y.seq);
-  };
-  const upd = () => { document.getElementById("freeEditTot").textContent = signed(attemptTotal({ ...a, events: build() })); };
+  const upd = () => { document.getElementById("freeEditTot").textContent = signed(attemptTotal({ ...a, events: freeEditBuild(a, counts()) })); };
   F.oninput = upd; upd();
-  F.onsubmit = ev => {
-    ev.preventDefault(); const why = fixRead(F); if (why === null) return; const before = attemptTotal(a);
-    a.events = build(); if (a.events.length) delete a.wo;
-    logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}. Motivo: ${why}`);
-    resyncSemis();
-    save(); closeModal(); toast("Tentativa corrigida"); render();
-  };
+  F.onsubmit = ev => { ev.preventDefault(); const why = fixRead(F); if (why === null) return; freeEditApply(id, counts(), why); };
+}
+// quantidades novas de cada marcação → lista de marcações (mantém as que já existiam)
+function freeEditBuild(a, counts) {
+  const out = [];
+  freeEvents().forEach((e, i) => {
+    const n = Math.max(0, Math.min(99, Math.round(num(counts[i], 0))));
+    const keep = a.events.filter(x => x.label === e.label).slice(0, n);
+    while (keep.length < n) keep.push({ id: uid(), pts: e.pts, label: e.label, t: "correção", seq: Date.now() + keep.length });
+    out.push(...keep);
+  });
+  return out.sort((x, y) => x.seq - y.seq);
+}
+// Aplica a correção (separada da janela para poder vir do celular do juiz)
+function freeEditApply(id, counts, why) {
+  const a = state.free.attempts.find(x => x.id === id); if (!a || !Array.isArray(counts) || !str(why)) return;
+  const before = attemptTotal(a);
+  a.events = freeEditBuild(a, counts); if (a.events.length) delete a.wo;
+  logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}. Motivo: ${str(why)}`);
+  resyncSemis();
+  save(); if (!CMD_RUN) closeModal(); toast("Tentativa corrigida"); render();
 }
 // A Classificação Geral mudou (correção na Arena): se as semifinais ainda não foram jogadas, refaz com os novos 4 primeiros
 function resyncSemis() {

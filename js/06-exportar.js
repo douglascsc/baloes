@@ -116,7 +116,7 @@ function exportXlsx() {
 }
 // Ao fim de cada etapa, baixa sozinho a planilha e o backup JSON (pasta Downloads)
 function autoBackup(label, title) {
-  if (TELAO_WINDOW || XMODE || !cfg().autoBackup) return;
+  if (TELAO_WINDOW || XMODE || JUIZ || !cfg().autoBackup) return;
   logEv(`Backup automático: ${title}`);
   save();
   setTimeout(() => {

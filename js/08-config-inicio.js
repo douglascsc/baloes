@@ -55,6 +55,19 @@ function config() {
           <option value="all" ${s.geralCup === "all" ? "selected" : ""}>Também a fase eliminatória (semifinais, 3º lugar e final somam)</option></select>
           <p class="muted small">Não muda o chaveamento das semifinais (que usa só a fase preliminar).</p></div>
       </div></div>
+      <div class="card"><h2>📱 Juízes pelo celular</h2>
+        <p class="muted small">Os juízes usam a Arena Livre e o Confronto Direto pelo celular; o note executa cada ação, salva e mostra no telão. Sem limite de juízes.</p>
+        <div class="beep-at"><label for="jPin">PIN dos juízes (4 a 8 números):</label><input id="jPin" inputmode="numeric" maxlength="8" value="${esc(s.judgePin)}" placeholder="desligado" onchange="setSetting('judgePin',this.value)"><button class="btn small" onclick="setSetting('judgePin',String(1000+Math.floor(Math.random()*9000)))">🎲 Gerar</button>${s.judgePin ? `<button class="btn small ghost" onclick="setSetting('judgePin','')">Desligar</button>` : ""}</div>
+        ${!s.judgePin ? `<p class="muted small">Defina um PIN para ligar o acesso dos juízes.</p>`
+          : !(NET.on && NET.local) ? `<div class="notice warn mt-s">Para os celulares acessarem, abra o sistema pelo <b>iniciar-servidor.bat</b> (endereço http://localhost:8000).</div>`
+          : `<div class="notice mt-s">No celular (na mesma rede do note), abra:${NET.urls.map(u => `<br><b class="big-url">${esc(u)}#juiz</b>`).join("") || " <b>(nenhuma rede encontrada — ligue o Hotspot do note)</b>"}<br>e entre com o seu nome e o PIN <b>${esc(s.judgePin)}</b>.</div>
+             <p class="small mt-s"><b>Juízes conectados:</b> ${(() => { const on = Object.entries(JUDGE.judges).filter(([, t]) => Date.now() - t < 60000).map(([n]) => esc(n)); return on.length ? on.join(" · ") : "nenhum ainda"; })()} <button class="btn tiny" onclick="render()">↻</button></p>`}
+        <details class="mt-s"><summary class="small"><b>📶 Criar a rede no note (Hotspot do Windows)</b></summary><ol class="small">
+          <li>Execute <b>ligar-rede-do-note.bat</b> (ou Configurações do Windows → Rede e Internet → <b>Hotspot móvel</b>) e ligue o Hotspot. Anote o nome da rede e a senha.</li>
+          <li>Conecte os celulares dos juízes (e o PC do telão, se for outro) nessa rede.</li>
+          <li>Abra o <b>iniciar-servidor.bat</b> no note. Na 1ª vez, se o Windows perguntar, permita o acesso do Python às redes <b>privadas e públicas</b>.</li>
+          <li>No celular, abra o endereço acima (no Hotspot do Windows costuma ser <b>http://192.168.137.1:8000/#juiz</b>).</li></ol>
+          <p class="muted small">Funciona sem internet. O som (bipes e "Preparar") continua tocando no note/telão.</p></details></div>
       <div class="card"><h2>🔊 Sons e backup</h2>
         <label class="check"><input type="checkbox" ${s.sound ? "checked" : ""} onchange="setSetting('sound',this.checked)"> Sons neste PC</label>
         <div class="vol-row"><label for="beepVol">🔊 Volume dos bipes: <b>${s.beepVol}</b> de 10</label><input id="beepVol" type="range" min="1" max="10" step="1" value="${s.beepVol}" onchange="setSetting('beepVol',this.value);getAudio();setTimeout(()=>beep('start'),80)"></div>
@@ -219,9 +232,9 @@ function timerTick(bg = false) {
   countdownBeep(state.free.current?.timer, "free"); countdownBeep(liveMatch()?.timer, "cup", liveMatch()?.phase);
   // fim do "Preparar": redesenha (status e botões de pontuação)
   const k = bg ? "bg" : "main", pr = inPrep(state.free.current?.timer) || inPrep(liveMatch()?.timer), prChanged = pr !== lastPrep[k]; lastPrep[k] = pr;
-  if (TELAO_WINDOW) {
+  if (TELAO_WINDOW || JUIZ) {
     let xch = false;
-    if (state.display.mode === "extras" && XVIEW) withXState(XVIEW, () => { // bipes e "Preparar" da sessão Extras mostrada no telão
+    if (TELAO_WINDOW && state.display.mode === "extras" && XVIEW) withXState(XVIEW, () => { // bipes e "Preparar" da sessão Extras mostrada no telão
       countdownBeep(state.free.current?.timer, "free"); countdownBeep(liveMatch()?.timer, "cup", liveMatch()?.phase);
       const xp = inPrep(state.free.current?.timer) || inPrep(liveMatch()?.timer); xch = xp !== lastPrep.x; lastPrep.x = xp;
     });
@@ -244,7 +257,7 @@ setInterval(() => { timerTick(); if (XMODE) withOfficial(() => timerTick(true));
 
 /* ---------- Backup automático periódico (sempre do estado OFICIAL, também com a guia Extras aberta) ---------- */
 function periodicBackup() {
-  if (TELAO_WINDOW || RESETTING) return;
+  if (TELAO_WINDOW || RESETTING || JUIZ) return;
   const o = officialState(), min = o.settings.backupMin;
   if (!min || !o.settings.autoBackup || !BK.dirty || Date.now() - BK.last < min * 60000) return;
   try {
@@ -286,10 +299,14 @@ async function pushState() {
 async function pollState() {
   const t0 = Date.now();
   try {
-    const r = await fetchT(`/api/estado?since=${NET.rev}`, 3000);
+    const r = await fetchT(`/api/estado?since=${JUIZ && JUDGE.pending.length ? "x" : NET.rev}`, 3000);
     const j = await r.json(), t1 = Date.now();
     if (Number.isFinite(j.now)) NET.offset = j.now - (t0 + t1) / 2;
-    if (j.rev !== NET.rev && j.data) { NET.rev = j.rev; state = normalize(j.data); XVIEW = xFromRaw(j.extras); render(); }
+    if (JUIZ) {
+      await judgeResults();
+      // enquanto há ação enviada esperando o note, mantém na tela o efeito simulado
+      if (!JUDGE.pending.length && j.rev !== NET.rev && j.data) { NET.rev = j.rev; const v = state.view; state = normalize(j.data); state.view = JUDGE_VIEWS.includes(v) ? v : "arena"; if (document.getElementById("modal").classList.contains("hidden")) render(); else updateTimers(); }
+    } else if (j.rev !== NET.rev && j.data) { NET.rev = j.rev; state = normalize(j.data); XVIEW = xFromRaw(j.extras); render(); }
     setNet(true);
   } catch (e) { if (Date.now() - NET.lastOk > 3000) setNet(false); }
   setTimeout(pollState, 500);
@@ -298,6 +315,7 @@ async function pollState() {
 setInterval(() => { if (NET.on && NET.local && !TELAO_WINDOW && !NET.ok) pushState(); }, 3000);
 function updateNetPill() {
   const el = document.getElementById("netPill"); if (!el) return;
+  if (JUIZ) { el.classList.remove("hidden"); el.className = `net-pill ${NET.ok ? "ok" : "bad"}`; el.textContent = `👨‍⚖️ ${JUDGE.name || "Juiz"} · ${!NET.ok ? "🟠 sem conexão" : JUDGE.pending.length ? "⏳ enviando…" : "🟢 conectado"}`; el.title = "Juiz pelo celular — clique para trocar de juiz"; return; }
   if (!NET.on || !NET.local || TELAO_WINDOW) { el.classList.add("hidden"); return; }
   el.classList.remove("hidden");
   el.className = `net-pill ${NET.ok ? "ok" : "bad"}`;
@@ -310,11 +328,12 @@ async function detectServer() {
     if (!r.ok) return;
     const j = await r.json(); if (!j || j.server !== true) return;
     NET.on = true; NET.local = !!j.local; NET.urls = Array.isArray(j.urls) ? j.urls : [];
-    if (!NET.local) TELAO_WINDOW = true;
+    if (!NET.local && !JUIZ) TELAO_WINDOW = true;
     const e = await (await fetchT("/api/estado", 3000)).json();
     NET.rev = e.rev || 0; NET.lastOk = Date.now();
     if (Number.isFinite(e.now)) NET.offset = e.now - Date.now();
-    if (TELAO_WINDOW) { if (e.data) state = normalize(e.data); XVIEW = xFromRaw(e.extras); }
+    if (JUIZ) { if (e.data) { state = normalize(e.data); state.view = "arena"; } }
+    else if (TELAO_WINDOW) { if (e.data) state = normalize(e.data); XVIEW = xFromRaw(e.extras); }
     else if (e.data) { state = normalize(e.data); state.display.reveal = false; save(); }
     else save(); // servidor vazio: envia os dados deste PC
   } catch (err) { NET.on = false; }
@@ -327,6 +346,125 @@ function spaceTarget(e) {
   if (state.view === "confrontos" || (state.view === "extras" && !state.free.current)) { const m = liveMatch(); return !!m && LIVE_PH.includes(m.phase) && m.timer.status !== "over"; }
   if (state.view === "extras") { const t = state.free.current?.timer; return !!t && t.status !== "over"; }
   return false;
+}
+/* ============================ JUÍZES PELO CELULAR ============================ */
+/* Celulares na rede do note (Hotspot do Windows ou Wi-Fi) abrem http://IP-do-note:porta/#juiz e entram com o PIN.
+   O celular mostra as mesmas telas da Arena e do Confronto, com os dados vindos do note. Cada ação do juiz é
+   simulada no próprio celular (para coletar as confirmações e mostrar o efeito na hora) e enviada ao note como
+   um comando { função, argumentos, respostas }. O NOTE executa o comando com as mesmas funções do jogo, salva e
+   transmite o novo estado — então vários juízes (sem limite fixo) podem agir ao mesmo tempo sem apagar um ao outro. */
+const JUDGE_ACTIONS = ["callTeam", "callNext", "freeToggle", "freeEvent", "freeUndo", "freeRemoveEvent", "freeFinish", "freeCancel", "freeRepeat", "freeWO", "freeVoid", "freeEditApply",
+  "closeArena", "reopenArena", "drawColors", "drawMissing", "startMatch", "matchToggle", "endRound", "startRound2", "startRound3", "repeatRound", "matchEvent", "matchUndo",
+  "matchRemoveEvent", "pickWinner", "confirmResult", "cancelMatch", "cupEditApply", "woApply", "adjTimer", "generatePrelim", "confirmTieOrder", "moveInTie", "clearManualOrder",
+  "setDisplay", "toggleTvReveal", "showOnTv"];
+const JUDGE_VIEWS = ["inicio", "arena", "confrontos", "geral", "podio", "crono"];
+const JKEY = "robosapiens_estoura_baloes_juiz";
+const JUDGE = { name: "", pin: "", pending: [], judges: {} };
+try { const j = JSON.parse(localStorage.getItem(JKEY) || "{}"); JUDGE.name = str(j.name).slice(0, 40); JUDGE.pin = str(j.pin).slice(0, 8); } catch (e) { /* segue */ }
+function saveJudge() { try { localStorage.setItem(JKEY, JSON.stringify({ name: JUDGE.name, pin: JUDGE.pin })); } catch (e) { /* segue */ } }
+
+/* ---- No NOTE: busca e executa os comandos dos juízes ---- */
+let cmdLast = 0, cmdBusy = false;
+function runJudgeCmd(c) {
+  if (!JUDGE_ACTIONS.includes(c.fn) || typeof window[c.fn] !== "function") return { ok: false, msgs: ["Ação não permitida pelo celular."] };
+  const answers = Array.isArray(c.answers) ? [...c.answers] : [], warns = [];
+  const oc = window.confirm, op = window.prompt, ot = window.toast;
+  // as confirmações já foram respondidas no celular; se faltar resposta, a ação é cancelada (seguro)
+  window.confirm = () => answers.length ? !!answers.shift() : false;
+  window.prompt = () => { if (!answers.length) return null; const v = answers.shift(); return v === null ? null : String(v); };
+  window.toast = (m, type = "ok") => { if (type === "warn") warns.push(String(m)); ot(`📱 ${c.judge || "Juiz"}: ${m}`, type); };
+  CMD_RUN = true; OPER_OVERRIDE = `Juiz ${c.judge || ""}`.trim();
+  const rr = reviewRound;
+  const exec = () => { if ([1, 2, 3].includes(c.review)) reviewRound = c.review; window[c.fn](...(Array.isArray(c.args) ? c.args : [])); };
+  try {
+    if (XMODE) { reviewRound = officialReviewRound; withOfficial(exec); officialReviewRound = reviewRound; reviewRound = rr; } else exec();
+    return { ok: true, msgs: warns };
+  } catch (e) { console.error(e); return { ok: false, msgs: [...warns, "Erro no note ao executar: " + e.message] }; }
+  finally { window.confirm = oc; window.prompt = op; window.toast = ot; CMD_RUN = false; OPER_OVERRIDE = ""; }
+}
+async function pollCmds() {
+  if (!NET.on || !NET.local || TELAO_WINDOW || JUIZ || RESETTING || cmdBusy || !officialState().settings.judgePin) return;
+  cmdBusy = true;
+  try {
+    const j = await (await fetchT(`/api/cmd?after=${cmdLast}`, 2500)).json(), done = [];
+    JUDGE.judges = j.judges || {};
+    for (const c of j.cmds || []) {
+      cmdLast = Math.max(cmdLast, c.id);
+      done.push(j.now - c.t > 60000 ? { id: c.id, ok: false, msgs: ["Comando expirado: o note ficou mais de 1 min sem receber."] } : { id: c.id, ...runJudgeCmd(c) });
+    }
+    if (done.length) await fetchT("/api/cmd/done", 3000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ done }) });
+  } catch (e) { /* tenta de novo no próximo ciclo */ }
+  cmdBusy = false;
+}
+setInterval(pollCmds, 400);
+
+/* ---- No CELULAR do juiz ---- */
+function judgeSetup() {
+  document.body.classList.add("juiz-mode");
+  JUDGE_ACTIONS.forEach(name => {
+    const orig = window[name]; if (typeof orig !== "function") return;
+    window[name] = function (...args) { return SIM ? orig.apply(this, args) : judgeAct(name, args, orig); };
+  });
+  if (!JUDGE_VIEWS.includes(state.view)) state.view = "arena";
+  if (!NET.on) { main().innerHTML = `<div class="card stage center"><h2>📱 Modo juiz</h2><p>Abra pelo endereço do note mostrado na janela do <b>iniciar-servidor.bat</b> (ex.: <b>http://192.168.137.1:8000/#juiz</b>), com o celular na rede do note.</p></div>`; return false; }
+  if (!JUDGE.pin || !JUDGE.name) judgeLogin();
+  setInterval(() => { if (JUDGE.pin) fetchT("/api/juiz/login", 3000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: JUDGE.pin, judge: JUDGE.name }) }).then(r => { if (r.status === 401) judgeLost(); }).catch(() => {}); }, 20000);
+  return true;
+}
+function judgeLost() { JUDGE.pin = ""; saveJudge(); warn("PIN inválido ou juízes desligados no note. Entre de novo."); judgeLogin(); NET.rev = -1; }
+function judgeLogin() {
+  openModal(`<h2>👨‍⚖️ Entrar como juiz</h2><p class="muted small">Use o PIN definido no note (Config. → Juízes pelo celular).</p>
+    <form id="jLogin"><div class="form-grid"><div><label>Seu nome</label><input name="name" maxlength="40" required value="${esc(JUDGE.name)}" placeholder="ex.: Ana"></div>
+    <div><label>PIN</label><input name="pin" inputmode="numeric" maxlength="8" required value="" placeholder="PIN do note"></div></div>
+    <div class="actions mt"><button class="btn primary big">Entrar</button></div></form>`);
+  document.getElementById("jLogin").onsubmit = async e => {
+    e.preventDefault(); const F = e.target, name = str(F.elements.name.value).slice(0, 40), pin = str(F.elements.pin.value).replace(/\D/g, "");
+    if (!name || !pin) return;
+    try {
+      const r = await fetchT("/api/juiz/login", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin, judge: name }) });
+      if (!r.ok) return fieldErr(F, "pin", r.status === 401 ? "PIN incorreto (ou juízes desligados no note)." : "O note recusou a conexão.");
+      Object.assign(JUDGE, { name, pin }); saveJudge(); closeModal(); toast(`Conectado como juiz: ${name}`); render();
+    } catch (err) { fieldErr(F, "pin", "Sem conexão com o note. Confira se o celular está na rede do note."); }
+  };
+}
+// Ação do juiz: simula aqui (confirmações + efeito na tela) e manda o comando para o note
+function judgeAct(fn, args, orig) {
+  if (!JUDGE.pin) return judgeLogin();
+  const strip = o => { const c = { ...o }; delete c.view; return JSON.stringify(c); };
+  const real = state, before = strip(real), answers = [], simMsgs = [];
+  const oc = window.confirm, op = window.prompt, ot = window.toast;
+  window.confirm = m => { const r = oc.call(window, m); answers.push(r); return r; };
+  window.prompt = (m, d) => { const r = op.call(window, m, d); answers.push(r); return r; };
+  window.toast = (m, type) => { simMsgs.push(String(m)); ot(m, type); };
+  state = JSON.parse(JSON.stringify(real)); SIM = true;
+  try { orig(...args); } catch (e) { console.error(e); }
+  finally { SIM = false; window.confirm = oc; window.prompt = op; window.toast = ot; }
+  if (strip(state) === before) { const v = state.view; state = real; state.view = v; render(); return; } // cancelado ou só um aviso: nada a enviar
+  judgeSendCmd(fn, args, answers, simMsgs);
+}
+async function judgeSendCmd(fn, args, answers, simMsgs) {
+  const p = { t: Date.now(), id: null, simMsgs }; JUDGE.pending.push(p); updateNetPill();
+  try {
+    const r = await fetchT("/api/cmd", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: JUDGE.pin, judge: JUDGE.name, fn, args, answers, review: reviewRound }) });
+    if (r.status === 401) { JUDGE.pending = JUDGE.pending.filter(x => x !== p); return judgeLost(); }
+    if (!r.ok) throw new Error(r.status);
+    p.id = (await r.json()).id;
+  } catch (e) { JUDGE.pending = JUDGE.pending.filter(x => x !== p); NET.rev = -1; warn("Não foi possível enviar ao note. Confira a rede e tente de novo."); }
+}
+// Resultado dos comandos enviados (chamado antes de cada atualização do estado no celular)
+async function judgeResults() {
+  const ids = JUDGE.pending.filter(p => p.id).map(p => p.id);
+  if (ids.length) {
+    const j = await (await fetchT(`/api/cmd/res?ids=${ids.join(",")}`, 2500)).json();
+    Object.entries(j.res || {}).forEach(([id, res]) => {
+      const p = JUDGE.pending.find(x => x.id === Number(id)); JUDGE.pending = JUDGE.pending.filter(x => x !== p);
+      (res.msgs || []).filter(m => !p?.simMsgs.includes(m)).forEach(m => warn(`Note: ${m}`));
+      if (!res.ok) NET.rev = -1;
+    });
+  }
+  const late = JUDGE.pending.filter(p => Date.now() - p.t > 8000);
+  if (late.length) { JUDGE.pending = JUDGE.pending.filter(p => !late.includes(p)); NET.rev = -1; warn("O note não respondeu a uma ação. Confira se o sistema está aberto no note."); }
+  updateNetPill();
 }
 function startUI() {
   if (TELAO_WINDOW) {
@@ -347,7 +485,7 @@ function startUI() {
     document.querySelectorAll(".nav-btn").forEach(b => b.onclick = () => { if (XMODE && b.dataset.view !== "extras") exitExtras(); nav(b.dataset.view); });
     document.getElementById("btnTelao").onclick = () => openTelaoWindow();
     document.getElementById("btnFullscreen").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); };
-    document.getElementById("netPill").onclick = () => nav("telao");
+    document.getElementById("netPill").onclick = () => JUIZ ? judgeLogin() : nav("telao");
     document.getElementById("tvPill").onclick = () => nav("telao");
     document.getElementById("bkPill").onclick = () => { exportData(); toast("💾 Backup (JSON) salvo na pasta Downloads"); };
     document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
@@ -370,6 +508,7 @@ function startUI() {
       const v = state.view; state = load(); state.view = v; render();
     });
   }
+  if (JUIZ) { if (judgeSetup()) { updateNetPill(); pollState(); render(); } return; } // celular do juiz: só mostra e envia comandos
   updateNetPill();
   // semifinais ainda não jogadas que foram geradas pela regra antiga (só a preliminar) passam a seguir a Classificação Geral
   // semifinais já jogadas antes desta versão: cria a disputa de 3º lugar ao abrir

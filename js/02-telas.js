@@ -32,6 +32,8 @@ function toggleReveal() { reveal = !reveal; render(); }
 
 /* ============================ NAVEGAÇÃO ============================ */
 function nav(view) {
+  if (CMD_RUN) { render(); return; } // comando de juiz no note: não troca a tela de quem está no note
+  if (JUIZ && !JUDGE_VIEWS.includes(view)) return warn("No celular do juiz: Início, Arena Livre, Confronto Direto, classificações e cronograma.");
   if (XMODE) {
     // dentro de Extras, as funções do jogo pedem a tela da Arena/Confronto: fica na guia Extras
     if (["arena", "confrontos", "extras"].includes(view)) { state.view = "extras"; save(); render(); window.scrollTo({ top: 0 }); return; }

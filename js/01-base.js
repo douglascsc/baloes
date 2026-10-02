@@ -12,6 +12,10 @@ const KEY = "robosapiens_estoura_baloes_v3";
 const OLD_KEY = "robosapiens_estoura_baloes_v2";
 // Janela só de exibição: "#telao" ou outro PC acessando pela rede local
 let TELAO_WINDOW = location.hash === "#telao";
+/* Juiz pelo celular (index.html#juiz, pela rede do note): mostra as telas da Arena e do Confronto com os dados do note,
+   e cada ação vira um comando que o note executa (o note continua dono dos dados). Ver js/08-config-inicio.js. */
+const JUIZ = location.hash === "#juiz";
+let CMD_RUN = false, OPER_OVERRIDE = "", SIM = false; // CMD_RUN: o note executando um comando de juiz; SIM: celular simulando a ação
 
 /* Modo rede local (servidor.py): o PC que registra envia o estado ao
    servidor; o PC do telão consulta o servidor e atualiza sozinho. */
@@ -122,6 +126,8 @@ function defaultSettings() {
     prepMode: "voz", prepDelay: 2,
     // backup automático periódico (JSON na pasta Downloads), em minutos; 0 = desligado
     backupMin: 15,
+    // PIN dos juízes pelo celular (vazio = desligado); o servidor nunca envia o PIN para a rede
+    judgePin: "",
     // Classificação Geral: geralCup "prelim" = só a fase preliminar do Confronto; "all" = também semifinais, 3º lugar e final
     // Classificação pelo SALDO de pontos (não há pontos de vitória/empate/derrota).
     // Desempate definido pela organização: confronto direto → número de vitórias → numeração do sorteio → decisão da comissão
@@ -201,6 +207,7 @@ function normalize(raw) {
   // Atualização única: a Arena Livre passou a usar 12 balões por tentativa (antes o padrão era 9)
   if (!(num(s.settings?.balV, 0) >= 1)) { if (st.freeArenaBalloons === 9) st.freeArenaBalloons = 12; } st.balV = 1;
   st.backupMin = [0, 10, 15, 30].includes(Number(st.backupMin)) ? Number(st.backupMin) : 15;
+  st.judgePin = str(st.judgePin).replace(/\D/g, "").slice(0, 8);
   st.cupR3 = clampI(st.cupR3, 5, 900, 60); st.prepDelay = clampI(st.prepDelay, 1, 10, 2);
   delete st.winPts; delete st.drawPts; delete st.lossPts; // a fase preliminar não usa pontos de vitória/empate/derrota
   st.cupGames = [0, 2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 0;
@@ -330,7 +337,7 @@ const BK_KEY = "robosapiens_estoura_baloes_backup";
 const BK = { last: (() => { try { return num(JSON.parse(localStorage.getItem(BK_KEY) || "{}").last, 0); } catch (e) { return 0; } })(), dirty: false };
 function markBackup() { BK.last = Date.now(); BK.dirty = false; try { localStorage.setItem(BK_KEY, JSON.stringify({ last: BK.last })); } catch (e) { /* segue */ } updateBkPill(); }
 function save() {
-  if (TELAO_WINDOW || RESETTING) return;
+  if (TELAO_WINDOW || RESETTING || JUIZ) return; // o celular do juiz nunca grava: só envia comandos
   if (XMODE) return saveExtras(); // sessão Extras: nunca grava na chave oficial nem envia ao servidor
   BK.dirty = true;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { warn("Não foi possível salvar no navegador (armazenamento cheio ou bloqueado). Exporte um backup em Configurações."); }
@@ -358,7 +365,7 @@ const warn = msg => toast(msg, "warn");
 // Histórico de alterações (vai também para a planilha Excel)
 /* Operador deste computador (Config. e janelas de correção): vai junto em cada registro do histórico */
 const OPER_KEY = "robosapiens_estoura_baloes_operador";
-function operator() { try { return str(localStorage.getItem(OPER_KEY)).slice(0, 60); } catch (e) { return ""; } }
+function operator() { if (OPER_OVERRIDE) return OPER_OVERRIDE; if (JUIZ && typeof JUDGE !== "undefined" && JUDGE.name) return `Juiz ${JUDGE.name}`; try { return str(localStorage.getItem(OPER_KEY)).slice(0, 60); } catch (e) { return ""; } }
 function setOperator(v) { try { const n = str(v).slice(0, 60); if (n) localStorage.setItem(OPER_KEY, n); else localStorage.removeItem(OPER_KEY); } catch (e) { /* segue */ } }
 function logEv(msg) {
   if (TELAO_WINDOW) return;
@@ -389,7 +396,7 @@ function tone(freq, dur, vol = beepGain()) {
   c.resume().then(() => { if (c.state === "running" && Date.now() - asked < 1500) play(); }).catch(() => {});
 }
 function beep(kind = "end") {
-  if (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound) return;
+  if (JUIZ || (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound)) return; // celular do juiz: o som toca no note/telão
   if (kind === "warn") tone(660, 0.14); else if (kind === "start") tone(1046, 0.45); else { tone(880, 0.9); }
 }
 /* "PREPARAR" antes do bipe de início: voz gravada embutida (assets/preparar-voz.js) ou um som enviado nas Configurações,
@@ -436,7 +443,7 @@ function loudChain(c, buf, vol) {
 }
 function preloadPrep() { const c = getAudio(), s = prepSource(); if (c && s && cfg().prepMode !== "pc") prepBuffer(c, s); }
 function playPrep(force = false) {
-  if (!force && (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound)) return;
+  if (JUIZ || (!force && (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound))) return;
   const mode = cfg().prepMode, vol = Math.min(1, beepGain());
   if (mode === "off" && !force) return;
   if (mode !== "pc") {
@@ -498,7 +505,7 @@ const main = () => document.getElementById("main");
 /* Timers baseados em horário: sobrevivem a recarregar a página e
    sincronizam com a janela do telão. */
 // No PC do telão, corrige a diferença de relógio em relação ao PC que registra
-const now = () => Date.now() + (TELAO_WINDOW && NET.on ? NET.offset : 0);
+const now = () => Date.now() + ((TELAO_WINDOW || JUIZ) && NET.on ? NET.offset : 0);
 // durante o "Preparar" o cronômetro já está rodando, mas parado no tempo cheio até o bipe de início
 function left(t) { if (!t) return 0; return t.status === "running" ? Math.max(0, Math.min(t.duration, (t.endsAt - now()) / 1000)) : Math.max(0, t.remaining); }
 const inPrep = t => !!t && t.status === "running" && (t.endsAt - now()) / 1000 > t.duration + 0.05;

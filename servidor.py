@@ -30,6 +30,10 @@ store = {"rev": 0, "data": None}
 # Sessao Extras para o telao (so quando o operador escolhe "Sessao Extras" no telao).
 # Fica so na memoria, separada dos dados oficiais: nao vai para o dados-competicao.json.
 extras_store = {"extras": None}
+# Juizes pelo celular: cada toque vira um comando pequeno que o PC de registro executa
+# (o PC de registro continua dono dos dados). Protegido pelo PIN definido em Config.
+cmd_store = {"next": 1, "cmds": [], "res": {}, "judges": {}}  # judges: nome -> ultimo contato (ms)
+MAX_CMD = 64 * 1024
 
 
 def load_store():
@@ -110,18 +114,58 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         port = self.server.server_address[1]
         return origin in (f"http://localhost:{port}", f"http://127.0.0.1:{port}", f"http://[::1]:{port}")
 
+    def same_host(self):
+        """Comandos dos celulares: a origem precisa ser este proprio servidor (http://IP-do-note:porta)."""
+        origin = self.headers.get("Origin")
+        return origin is None or origin == "http://" + str(self.headers.get("Host", ""))
+
+    def judge_pin(self):
+        with lock:
+            d = store["data"] or {}
+        pin = str((d.get("settings") or {}).get("judgePin") or "")
+        return pin
+
+    def read_json(self, limit):
+        if not self.headers.get("Content-Type", "").startswith("application/json"):
+            return None, (415, "formato invalido")
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            if n <= 0 or n > limit:
+                return None, (400, "tamanho invalido")
+            return json.loads(self.rfile.read(n).decode("utf-8")), None
+        except (ValueError, UnicodeDecodeError):
+            return None, (400, "JSON invalido")
+
     def do_GET(self):
         url = urlparse(self.path)
+        if url.path == "/api/cmd":  # so o PC de registro busca os comandos
+            if not self.is_local():
+                return self.send_json({"erro": "proibido"}, 403)
+            raw = parse_qs(url.query).get("after", ["0"])[0]
+            after = int(raw) if raw.isdigit() else 0
+            with lock:
+                cmds = [c for c in cmd_store["cmds"] if c["id"] > after]
+                judges = dict(cmd_store["judges"])
+            return self.send_json({"cmds": cmds, "now": int(time.time() * 1000), "judges": judges})
+        if url.path == "/api/cmd/res":
+            ids = [int(x) for x in (parse_qs(url.query).get("ids", [""])[0]).split(",") if x.isdigit()][:50]
+            with lock:
+                res = {str(i): cmd_store["res"][i] for i in ids if i in cmd_store["res"]}
+            return self.send_json({"res": res})
         if url.path == "/api/info":
             port = self.server.server_address[1]
-            return self.send_json({"server": True, "local": self.is_local(),
+            return self.send_json({"server": True, "local": self.is_local(), "judges": True,
                                    "urls": [f"http://{ip}:{port}/" for ip in lan_ips()]})
         if url.path == "/api/estado":
             since = parse_qs(url.query).get("since", [None])[0]
             with lock:
                 out = {"rev": store["rev"], "now": int(time.time() * 1000)}
                 if since is None or str(store["rev"]) != since:
-                    out["data"] = store["data"]
+                    data = store["data"]
+                    # o PIN dos juizes nunca sai para a rede (telao e celulares)
+                    if data and not self.is_local() and isinstance(data.get("settings"), dict) and "judgePin" in data["settings"]:
+                        data = dict(data); data["settings"] = dict(data["settings"]); data["settings"]["judgePin"] = ""
+                    out["data"] = data
                     out["extras"] = extras_store["extras"]
             return self.send_json(out)
         # nao expoe o backup, o proprio servidor nem pastas ocultas (.git etc.)
@@ -132,7 +176,49 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/estado":
+        path = urlparse(self.path).path
+        if path in ("/api/cmd", "/api/juiz/login"):  # celular do juiz (qualquer PC da rede, com PIN)
+            if not self.same_host():
+                return self.send_json({"erro": "origem invalida"}, 403)
+            p, err = self.read_json(MAX_CMD)
+            if err:
+                return self.send_json({"erro": err[1]}, err[0])
+            pin = self.judge_pin()
+            if not pin or str(p.get("pin", "")) != pin:
+                return self.send_json({"erro": "PIN invalido ou juizes desligados"}, 401)
+            with lock:
+                name = str(p.get("judge", ""))[:40] or "Juiz"
+                cmd_store["judges"][name] = int(time.time() * 1000)
+                if len(cmd_store["judges"]) > 50:
+                    for k in sorted(cmd_store["judges"], key=cmd_store["judges"].get)[:-50]:
+                        del cmd_store["judges"][k]
+            if path == "/api/juiz/login":
+                return self.send_json({"ok": True})
+            fn, args = p.get("fn"), p.get("args", [])
+            if not isinstance(fn, str) or len(fn) > 40 or not isinstance(args, list):
+                return self.send_json({"erro": "comando invalido"}, 400)
+            with lock:
+                cid = cmd_store["next"]; cmd_store["next"] += 1
+                cmd_store["cmds"].append({"id": cid, "t": int(time.time() * 1000), "judge": str(p.get("judge", ""))[:40], "fn": fn, "args": args,
+                                          "answers": p.get("answers", []) if isinstance(p.get("answers"), list) else [], "review": p.get("review")})
+                cmd_store["cmds"] = cmd_store["cmds"][-500:]
+            return self.send_json({"id": cid})
+        if path == "/api/cmd/done":  # PC de registro confirma o comando executado
+            if not self.is_local() or not self.same_origin():
+                return self.send_json({"erro": "proibido"}, 403)
+            p, err = self.read_json(MAX_CMD)
+            if err:
+                return self.send_json({"erro": err[1]}, err[0])
+            with lock:
+                for r in (p.get("done") or []):
+                    if isinstance(r, dict) and isinstance(r.get("id"), int):
+                        cmd_store["res"][r["id"]] = {"ok": bool(r.get("ok")), "msgs": [str(m)[:200] for m in (r.get("msgs") or [])][:5]}
+                        cmd_store["cmds"] = [c for c in cmd_store["cmds"] if c["id"] != r["id"]]
+                if len(cmd_store["res"]) > 1000:
+                    for k in sorted(cmd_store["res"])[:-500]:
+                        del cmd_store["res"][k]
+            return self.send_json({"ok": True})
+        if path != "/api/estado":
             return self.send_error(404)
         if not self.is_local() or not self.same_origin():
             return self.send_json({"erro": "Somente o PC que registra pode alterar os dados."}, 403)
@@ -193,6 +279,10 @@ def main():
             print(f"      http://{ip}:{port}/{nota}")
     else:
         print("      (nenhuma rede encontrada - conecte este PC ao Wi-Fi/cabo)")
+    print()
+    print("  JUIZES PELO CELULAR (mesma rede, PIN em Config.):")
+    for ip in ips:
+        print(f"      http://{ip}:{port}/#juiz")
     print()
     print("  Deixe esta janela ABERTA durante a competicao.")
     print("  Para desligar: feche esta janela (ou Ctrl+C).")
