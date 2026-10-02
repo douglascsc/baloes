@@ -4,7 +4,7 @@ Aplicação web estática para operar a modalidade Robô Estoura Balão (Ensino 
 Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos no `localStorage` do navegador.
 
 ## Arquivos
-- `index.html`, `style.css`, `script.js`: o sistema (abre direto no navegador).
+- `index.html`, `style.css` e a pasta `js/` (`01-base.js` … `08-config-inicio.js`, carregados nessa ordem): o sistema (abre direto no navegador). Pasta `assets/`: logos, logo da súmula e a voz "Preparar". Copie sempre **todas** as pastas.
 - `assets/`: logotipos (`logo-sumula.js` é o logo usado nas súmulas em Word).
 - `servidor.py` + `iniciar-servidor.bat`: modo com dois computadores (telão em outro PC), opcional.
 - `abrir-telao.bat`: abre o telão em tela cheia na TV ligada a este PC.
@@ -140,3 +140,10 @@ Para regerar (ex.: mudou alguma equipe): `npm install docx` e depois `node sumul
 - **Isolamento:** a sessão trabalha numa cópia própria das equipes, cores e configurações. Nada vai para o placar, classificações, pódio, histórico oficial, planilha, súmulas, backup JSON, telão ou servidor do telão em rede. Os dados de Extras ficam numa chave separada do navegador (`robosapiens_estoura_baloes_EXTRAS_v1`), apagada também pelo "Zerar este computador".
 - **Telão:** a sessão Extras só aparece no telão quando você escolhe (**📺 Mostrar no telão** na guia Extras, ou **Telão → 🧪 Sessão Extras**); o modo Automático (ao vivo) nunca mostra Extras. No telão aparece a etiqueta "EXTRAS · FORA DA COMPETIÇÃO OFICIAL". Ao chamar uma tentativa ou iniciar um confronto **oficial**, o telão volta sozinho ao automático. No telão em rede, a sessão vai ao servidor num campo separado, só em memória (não entra nos dados oficiais nem no `dados-competicao.json`).
 - Se houver uma tentativa ou confronto **oficial** em andamento, ele continua normalmente em segundo plano (cronômetro e bipes); para operá-lo, volte à guia dele pelo menu.
+
+## Ausência (W.O.), desclassificação e correções
+- **Arena Livre:** com a equipe chamada e antes de iniciar, **🚫 Ausente (W.O.)** registra a tentativa com 0 ponto (aparece como "W.O." na fila).
+- **Confronto Direto:** **🚫 Ausência / W.O.** (no próximo confronto) ou **🚫 W.O. / abandono** (no confronto em andamento): equipe ausente → a outra vence por 200 × 0 (os 2 balões do ausente contam como estourados); ambas ausentes → 0 × 0 na preliminar, comissão na eliminatória; abandono → os balões que restam ao robô que abandonou contam para o adversário, que vence.
+- **Desclassificação** (tela Equipes, depois de a competição começar): motivo obrigatório; a equipe sai das classificações e do pódio, os pontos dos adversários contra ela ficam, os confrontos dela ainda não disputados viram W.O. e, se as semifinais ainda não começaram, a vaga vai para o próximo. Pode ser revertida (os W.O. já lançados ficam para corrigir com ✏️).
+- **Correções** (✏️ Corrigir) exigem **motivo** e **operador**; anular tentativa exige motivo. O nome do operador deste PC (Config. → Sons e backup) vai em cada registro do histórico e na planilha.
+- **Backup periódico:** JSON automático na pasta Downloads a cada 15 min (10/15/30 ou desligado), só quando algo mudou; o topo mostra "💾 Backup hh:mm" (amarelo se atrasado) e clicar salva na hora.

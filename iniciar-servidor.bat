@@ -11,7 +11,7 @@ echo  ERRO: o arquivo servidor.py nao esta nesta pasta:
 echo    %CD%
 echo.
 echo  Este .bat precisa ficar junto com os arquivos do sistema
-echo  (servidor.py, index.html, script.js, style.css e a pasta assets).
+echo  (servidor.py, index.html, style.css e as pastas js e assets).
 echo  Baixe o sistema completo em:
 echo    https://github.com/douglascsc/baloes/archive/refs/heads/main.zip
 echo  extraia o ZIP e rode o iniciar-servidor.bat que esta dentro da pasta.
