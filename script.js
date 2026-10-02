@@ -187,7 +187,7 @@ function normalize(raw) {
   st.koR3 = ["sudden", "points", "off"].includes(st.koR3) ? st.koR3 : "points";
   // Atualização única: o padrão passou a ser o Round 3 igual ao Round 2 (antes era decisão da comissão)
   if (!(num(s.settings?.r3V, 0) >= 1)) { if (st.koR3 === "off") st.koR3 = "points"; } st.r3V = 1;
-  st.prepMode = ["voz", "som", "off"].includes(st.prepMode) ? st.prepMode : "voz";
+  st.prepMode = ["voz", "som", "pc", "off"].includes(st.prepMode) ? st.prepMode : "voz";
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
@@ -369,17 +369,60 @@ function beep(kind = "end") {
   if (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound) return;
   if (kind === "warn") tone(660, 0.14); else if (kind === "start") tone(1046, 0.45); else { tone(880, 0.9); }
 }
-/* "PREPARAR" antes do bipe de início: voz do computador em português (Web Speech) ou um som enviado nas Configurações.
-   O som enviado fica só neste navegador (não vai no JSON nem para o telão de outro PC, que usa a voz). */
+/* "PREPARAR" antes do bipe de início: voz gravada embutida (assets/preparar-voz.js) ou um som enviado nas Configurações,
+   tocados pelo Web Audio com normalização + compressão + limitador para soar no MESMO volume do bipe;
+   ou a voz do computador (Web Speech: o volume dela é o do Windows e não acompanha o bipe).
+   O som enviado fica só neste navegador (não vai no JSON nem para o telão de outro PC, que usa a voz gravada). */
 const PREP_KEY = "robosapiens_estoura_baloes_preparar";
 function prepAudio() { try { return localStorage.getItem(PREP_KEY) || ""; } catch (e) { return ""; } }
 function ptVoice() { const v = window.speechSynthesis?.getVoices?.() || []; return v.find(x => /^pt[-_]BR/i.test(x.lang)) || v.find(x => /^pt\b/i.test(x.lang)) || null; }
 try { window.speechSynthesis?.getVoices(); window.speechSynthesis && (window.speechSynthesis.onvoiceschanged = () => { if (!TELAO_WINDOW && state.view === "config") render(); }); } catch (e) { /* sem voz */ }
+const PREP_DRIVE = 3, PREP_MAKEUP = 2.8; // ajuste de volume percebido (medido contra o bipe quadrado)
+const prepBuffers = new Map();
+function b64Bytes(b64) { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+// qual áudio usar: o som enviado (modo "som", se houver) ou a voz gravada embutida
+function prepSource() {
+  const up = cfg().prepMode === "som" ? prepAudio() : "";
+  if (up) return { key: "up:" + up.length + ":" + up.slice(-40), bytes: () => b64Bytes(up.slice(up.indexOf(",") + 1)) };
+  return window.PREP_VOZ ? { key: "voz", bytes: () => b64Bytes(window.PREP_VOZ) } : null;
+}
+function prepBuffer(c, src) {
+  if (!prepBuffers.has(src.key)) prepBuffers.set(src.key, new Promise(res => {
+    try {
+      c.decodeAudioData(src.bytes().buffer, b => {
+        let pk = 0; for (let ch = 0; ch < b.numberOfChannels; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > pk) pk = v; } }
+        b._peak = pk || 1; res(b);
+      }, () => res(null));
+    } catch (e) { res(null); }
+  }));
+  return prepBuffers.get(src.key);
+}
+let tanhCurve = null;
+// cadeia: normaliza o pico → compressor → ganho → limitador suave → volume do bipe
+function loudChain(c, buf, vol) {
+  if (!tanhCurve) { tanhCurve = new Float32Array(2048); for (let i = 0; i < 2048; i++) { const x = i / 1023.5 - 1; tanhCurve[i] = Math.tanh(x * 3) / Math.tanh(3); } }
+  const node = (n, f) => { f(n); return n; };
+  const src = node(c.createBufferSource(), n => { n.buffer = buf; });
+  const pre = node(c.createGain(), n => { n.gain.value = PREP_DRIVE / buf._peak; });
+  const comp = node(c.createDynamicsCompressor(), n => { n.threshold.value = -24; n.knee.value = 6; n.ratio.value = 12; n.attack.value = 0.002; n.release.value = 0.12; });
+  const make = node(c.createGain(), n => { n.gain.value = PREP_MAKEUP; });
+  const sh = node(c.createWaveShaper(), n => { n.curve = tanhCurve; });
+  const out = node(c.createGain(), n => { n.gain.value = vol; });
+  src.connect(pre); pre.connect(comp); comp.connect(make); make.connect(sh); sh.connect(out); out.connect(c.destination);
+  return src;
+}
+function preloadPrep() { const c = getAudio(), s = prepSource(); if (c && s && cfg().prepMode !== "pc") prepBuffer(c, s); }
 function playPrep(force = false) {
   if (!force && (TELAO_WINDOW ? !cfg().soundTv : !cfg().sound)) return;
-  const mode = cfg().prepMode, vol = Math.min(1, beepGain()), src = prepAudio();
+  const mode = cfg().prepMode, vol = Math.min(1, beepGain());
   if (mode === "off" && !force) return;
-  if (mode === "som" && src) { try { const a = new Audio(src); a.volume = vol; a.play().catch(() => {}); } catch (e) { /* segue */ } return; }
+  if (mode !== "pc") {
+    const c = getAudio(), s = prepSource();
+    if (c && s) { const asked = Date.now(); prepBuffer(c, s).then(b => { if (b && Date.now() - asked < 1500) { if (c.state !== "running") c.resume(); loudChain(c, b, vol).start(); } else if (!b) speakPrep(vol); }); return; }
+  }
+  speakPrep(vol);
+}
+function speakPrep(vol) {
   try {
     const ss = window.speechSynthesis; if (!ss) return;
     const u = new SpeechSynthesisUtterance("Preparar"), v = ptVoice();
@@ -398,7 +441,7 @@ function uploadPrep(e) {
   };
   r.readAsDataURL(f);
 }
-function removePrep() { try { localStorage.removeItem(PREP_KEY); } catch (e) { /* segue */ } if (state.settings.prepMode === "som") state.settings.prepMode = "voz"; logEv("Som do \"Preparar\" removido (volta a voz do computador)"); save(); render(); }
+function removePrep() { try { localStorage.removeItem(PREP_KEY); } catch (e) { /* segue */ } if (state.settings.prepMode === "som") state.settings.prepMode = "voz"; logEv("Som do \"Preparar\" removido (volta à voz gravada)"); save(); render(); }
 const beeped = new Set();
 // kind: "free" (Arena Livre) ou "cup" (Confronto Direto); phase: fase do confronto
 function countdownBeep(t, kind = "free", phase = "") {
@@ -2547,14 +2590,16 @@ function config() {
         </div>`).join("")}
         <div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}"><b class="beep-title">📣 "PREPARAR" antes do bipe de início (Arena Livre e cada round)</b>
           <select onchange="setSetting('prepMode',this.value)" aria-label="Som do Preparar">
-            <option value="voz" ${s.prepMode === "voz" ? "selected" : ""}>Voz do computador falando "Preparar" (português)</option>
-            <option value="som" ${s.prepMode === "som" ? "selected" : ""}>Som enviado por mim (arquivo de áudio)</option>
+            <option value="voz" ${s.prepMode === "voz" ? "selected" : ""}>Voz gravada "Preparar!" (português) — mesmo volume do bipe</option>
+            <option value="som" ${s.prepMode === "som" ? "selected" : ""}>Som enviado por mim — ajustado ao volume do bipe</option>
+            <option value="pc" ${s.prepMode === "pc" ? "selected" : ""}>Voz do computador (Windows) — volume não acompanha o bipe</option>
             <option value="off" ${s.prepMode === "off" ? "selected" : ""}>Desligado (bipe de início na hora)</option></select>
           ${s.prepMode !== "off" ? `<div class="beep-at"><input type="number" min="1" max="10" value="${s.prepDelay}" onchange="setSetting('prepDelay',this.value)" aria-label="Segundos entre o Preparar e o bipe de início"><span class="muted small">segundos entre o "Preparar" e o bipe de início (o tempo só começa a correr no bipe)</span></div>` : ""}
-          ${s.prepMode === "voz" ? (() => { const v = ptVoice(); return v ? `<p class="muted small">Voz encontrada: <b>${esc(v.name)}</b>.</p>` : `<p class="muted small">⚠️ Nenhuma voz em português encontrada neste navegador${window.speechSynthesis ? " (pode demorar uns segundos para carregar)" : ""}. No Edge/Chrome do Windows costuma existir; se não falar, envie um som.</p>`; })() : ""}
-          ${s.prepMode === "som" && !prepAudio() ? `<p class="muted small">⚠️ Nenhum som enviado ainda: enquanto isso, usa a voz do computador.</p>` : ""}
+          ${s.prepMode === "pc" ? (() => { const v = ptVoice(); return v ? `<p class="muted small">Voz encontrada: <b>${esc(v.name)}</b>.</p>` : `<p class="muted small">⚠️ Nenhuma voz em português encontrada neste navegador${window.speechSynthesis ? " (pode demorar uns segundos para carregar)" : ""}. No Edge/Chrome do Windows costuma existir; se não falar, envie um som.</p>`; })() : ""}
+          ${s.prepMode === "som" && !prepAudio() ? `<p class="muted small">⚠️ Nenhum som enviado ainda: enquanto isso, usa a voz gravada.</p>` : ""}
+          ${s.prepMode === "voz" || s.prepMode === "som" ? `<p class="muted small">O "Preparar" é normalizado e comprimido para soar no mesmo volume do bipe e acompanha o controle "Volume dos bipes".</p>` : ""}
           <div class="actions mt-s"><label class="btn small file">⬆ ${prepAudio() ? "Trocar o som" : "Enviar um som"} (mp3, wav…)<input id="prepFile" type="file" accept="audio/*" hidden></label>${prepAudio() ? `<button class="btn small" onclick="removePrep()">🗑 Remover som enviado</button>` : ""}<button class="btn small" onclick="getAudio();playPrep(true)">🔈 Testar "Preparar"</button></div>
-          <p class="muted small">O som enviado fica guardado só neste navegador (não vai no backup JSON; um telão em outro PC usa a voz).</p></div>
+          <p class="muted small">O som enviado fica guardado só neste navegador (não vai no backup JSON; um telão em outro PC usa a voz gravada).</p></div>
         <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('start'),60)">🔈 Testar bipe de início</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
         <hr class="sep">
         <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label></div>
@@ -2828,5 +2873,5 @@ function startUI() {
 }
 let lastMinute = "";
 setInterval(() => { const m = nowHHMM(); if (m !== lastMinute) { const first = !lastMinute; lastMinute = m; if (!first && (state.view === "crono" || state.view === "inicio" || TELAO_WINDOW)) render(); } }, 5000);
-["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { getAudio(); document.getElementById("soundHint")?.classList.add("hidden"); }, { once: true }));
+["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { getAudio(); preloadPrep(); document.getElementById("soundHint")?.classList.add("hidden"); }, { once: true }));
 detectServer().finally(startUI);
