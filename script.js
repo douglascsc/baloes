@@ -113,8 +113,9 @@ function defaultSettings() {
     cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10", cupBeepEnd: true, cupBeepBreak: false,
     defV: 1,
     // Fase eliminatória: disputa de 3º lugar; chaveamento das semifinais ("geral" = Arena Livre + saldo da preliminar, "cup" = só o saldo da preliminar);
-    // Round 3 de desempate só se empatar ("off", "sudden" = morte súbita, "points" = pela pontuação do Round 3), sem repor balões
-    cupThird: true, koSeed: "geral", koR3: "off", cupR3: 60,
+    // Round 3 de desempate só se empatar, sem repor balões: "points" = igual ao Round 2 (intervalo antes, tempo do Round 2,
+    // vence quem marcar mais) — padrão; "sudden" = morte súbita (tempo cupR3); "off" = decisão da comissão
+    cupThird: true, koSeed: "geral", koR3: "points", cupR3: 60, r3V: 1,
     // "Preparar" antes do bipe de início: "voz" (voz do computador em português), "som" (arquivo enviado) ou "off"; espera em segundos até o bipe
     prepMode: "voz", prepDelay: 2,
     // Classificação Geral: geralCup "prelim" = só a fase preliminar do Confronto; "all" = também semifinais, 3º lugar e final
@@ -183,7 +184,9 @@ function normalize(raw) {
   st.freeMinZero = !!st.freeMinZero;
   st.geralCup = st.geralCup === "all" ? "all" : "prelim";
   st.cupThird = st.cupThird !== false; st.koSeed = st.koSeed === "cup" ? "cup" : "geral";
-  st.koR3 = ["sudden", "points"].includes(st.koR3) ? st.koR3 : "off";
+  st.koR3 = ["sudden", "points", "off"].includes(st.koR3) ? st.koR3 : "points";
+  // Atualização única: o padrão passou a ser o Round 3 igual ao Round 2 (antes era decisão da comissão)
+  if (!(num(s.settings?.r3V, 0) >= 1)) { if (st.koR3 === "off") st.koR3 = "points"; } st.r3V = 1;
   st.prepMode = ["voz", "som", "off"].includes(st.prepMode) ? st.prepMode : "voz";
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
@@ -248,6 +251,7 @@ function normalize(raw) {
       rounds: { 1: { events: normEvents(m.rounds?.[1]?.events) }, 2: { events: normEvents(m.rounds?.[2]?.events) }, 3: { events: normEvents(m.rounds?.[3]?.events) } },
       // Round 3 de desempate (fase eliminatória): modo jogado e quem venceu na morte súbita
       r3: ["sudden", "points"].includes(m.r3) ? m.r3 : undefined, r3Winner: ids.has(sid(m.r3Winner)) ? sid(m.r3Winner) : undefined,
+      toR3: !!m.toR3 && m.phase === "break", // intervalo antes do Round 3
       winner: m.winner === "draw" ? "draw" : ids.has(sid(m.winner)) ? sid(m.winner) : null,
       pick: ids.has(sid(m.pick)) ? sid(m.pick) : null, byDecision: !!m.byDecision,
       _backup: typeof m._backup === "string" ? m._backup : undefined, repeats: normRepeats(m.repeats),
@@ -1269,7 +1273,10 @@ function koResult(m) {
   if (m.r3 === "points") { const a3 = sideScore(m, "a", 3), b3 = sideScore(m, "b", 3); if (a3 !== b3) return { winner: a3 > b3 ? m.a : m.b, r3: true }; }
   return { winner: null, needR3: !m.r3 && cfg().koR3 !== "off" };
 }
-const R3_NAME = { sudden: "morte súbita", points: "pela pontuação" };
+const R3_NAME = { sudden: "morte súbita", points: "por pontuação" };
+// tempo do Round 3: igual ao Round 2 (por pontuação) ou o tempo próprio da morte súbita
+const r3Secs = mode => (mode || cfg().koR3) === "sudden" ? cfg().cupR3 : cfg().cupR2;
+const R3_DESC = { points: "Round 3 igual ao Round 2 (por pontuação)", sudden: "Round 3 morte súbita", off: "decisão da comissão" };
 const r3Label = m => `Round 3 · ${R3_NAME[m?.r3 || cfg().koR3] || "desempate"}`;
 
 /* ---- Condução do confronto ---- */
@@ -1279,7 +1286,7 @@ function startMatch(id) {
   if (state.free.current) return warn("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
   if (m.status !== "pending") return;
   leaveDrawScreen();
-  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, winner: null, pick: null, byDecision: false, r3: undefined, r3Winner: undefined });
+  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, winner: null, pick: null, byDecision: false, r3: undefined, r3Winner: undefined, toR3: false });
   state.cup.liveId = m.id; logEv(`${matchLabel(m)} iniciado: ${teamName(m.a)} × ${teamName(m.b)}`); save(); nav("confrontos");
 }
 function matchToggle() {
@@ -1337,14 +1344,15 @@ function maybeReopenRound(m, removedId) {
 }
 function startRound2() {
   const m = liveMatch(); if (!m || m.phase !== "break") return;
+  if (m.toR3) { m.toR3 = false; m.phase = "r3"; m.timer = newTimer(r3Secs(m.r3)); save(); render(); return; } // intervalo antes do Round 3
   m.phase = "r2"; m.timer = newTimer(cfg().cupR2); save(); render();
 }
-// Empate na fase eliminatória: Round 3 de desempate, com os balões que sobraram (não são repostos)
+// Empate na fase eliminatória: intervalo e Round 3 de desempate, com os balões que sobraram (não são repostos)
 function startRound3() {
   const m = liveMatch(); if (!m || m.phase !== "review" || m.stage === "prelim" || m.r3 || !koResult(m).needR3) return;
-  m.r3 = cfg().koR3; m.r3Winner = undefined; m.pick = null;
-  m.phase = "r3"; m.timer = newTimer(cfg().cupR3); m.autoEnd = undefined;
-  logEv(`${matchLabel(m)} — empate: Round 3 de desempate (${R3_NAME[m.r3]})`);
+  m.r3 = cfg().koR3; m.r3Winner = undefined; m.pick = null; m.autoEnd = undefined;
+  m.phase = "break"; m.toR3 = true; m.timer = newTimer(cfg().cupBreak); if (cfg().cupBreak > 0) tStart(m.timer); else m.timer.status = "over";
+  logEv(`${matchLabel(m)} — empate: intervalo e Round 3 de desempate (${R3_NAME[m.r3]})`);
   save(); render();
 }
 // Falha técnica: repete o round atual (zera as marcações e o cronômetro dele), registrando o motivo
@@ -1356,7 +1364,7 @@ function repeatRound() {
   const why = str(reason) || "não informado";
   logEv(`${matchLabel(m)} — Round ${r} repetido por falha técnica (descartado: ${sideScore(m, "a", r)} × ${sideScore(m, "b", r)}). Motivo: ${why}`);
   m.repeats = [...(m.repeats || []), { at: new Date().toISOString(), round: r, reason: why }];
-  m.rounds[r].events = []; m.timer = newTimer(r === 1 ? cfg().cupR1 : r === 2 ? cfg().cupR2 : cfg().cupR3);
+  m.rounds[r].events = []; m.timer = newTimer(r === 1 ? cfg().cupR1 : r === 2 ? cfg().cupR2 : r3Secs(m.r3));
   if (r === 3) m.r3Winner = undefined;
   save(); toast(`Round ${r} zerado para repetição`); render();
 }
@@ -1446,7 +1454,7 @@ function cancelMatch() {
   } else {
     if (!confirm("Cancelar este confronto? As marcações serão descartadas e ele volta para a fila.")) return;
     logEv(`${matchLabel(m)} cancelado (${teamName(m.a)} × ${teamName(m.b)}) — voltou para a fila`);
-    Object.assign(m, { status: "pending", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, pick: null, r3: undefined, r3Winner: undefined });
+    Object.assign(m, { status: "pending", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, pick: null, r3: undefined, r3Winner: undefined, toR3: false });
   }
   state.cup.liveId = null; save(); render();
 }
@@ -1567,8 +1575,8 @@ function nextPanel() {
 }
 function livePanel(m) {
   const a = findTeam(m.a), b = findTeam(m.b), t = m.timer, ph = m.phase, fix = !!m._backup;
-  const phases = [["r1", `Round 1 · ${fmt(cfg().cupR1)}`], ["break", `Intervalo · ${fmt(cfg().cupBreak)}`], ["r2", `Round 2 · ${fmt(cfg().cupR2)}`], ...(m.r3 ? [["r3", `${r3Label(m)} · ${fmt(cfg().cupR3)}`]] : []), ["review", "Resultado"]];
-  const idx = phases.findIndex(p => p[0] === ph), live = LIVE_PH.includes(ph), rn = phRound(ph), kr = m.stage !== "prelim" ? koResult(m) : null;
+  const phases = [["r1", `Round 1 · ${fmt(cfg().cupR1)}`], ["break", `Intervalo · ${fmt(cfg().cupBreak)}`], ["r2", `Round 2 · ${fmt(cfg().cupR2)}`], ...(m.r3 ? [["break3", `Intervalo · ${fmt(cfg().cupBreak)}`], ["r3", `${r3Label(m)} · ${fmt(r3Secs(m.r3))}`]] : []), ["review", "Resultado"]];
+  const idx = phases.findIndex(p => p[0] === (ph === "break" && m.toR3 ? "break3" : ph)), live = LIVE_PH.includes(ph), rn = phRound(ph), kr = m.stage !== "prelim" ? koResult(m) : null;
   const bar = `<div class="roundbar">${phases.map((p, i) => `<span class="round-pill ${i === idx ? "active" : i < idx ? "past" : ""}">${p[1]}</span>`).join("")}</div>`;
   const statusTxt = ph === "review" ? (fix ? "CORRIGINDO RESULTADO" : "CONFERÊNCIA DO RESULTADO") : ph === "break" ? (t.status === "over" ? "INTERVALO ENCERRADO" : "INTERVALO PARA AJUSTES") : inPrep(t) ? "PREPARAR…" : { idle: "PRONTO PARA INICIAR", running: rn === 3 ? `${r3Label(m).toUpperCase()} EM ANDAMENTO` : `ROUND ${rn} EM ANDAMENTO`, paused: "PAUSADO", over: "TEMPO ESGOTADO" }[t.status];
   const sa = sideScore(m, "a"), sb = sideScore(m, "b");
@@ -1587,11 +1595,11 @@ function livePanel(m) {
   if (live) {
     const toggle = t.status === "running" ? "❚❚ Pausar" : t.status === "paused" ? "▶ Retomar" : `▶ Iniciar Round ${rn}`;
     ctrl = `<button class="btn ${t.status === "running" ? "" : "primary"} big" onclick="matchToggle()" ${t.status === "over" ? "disabled" : ""}>${toggle}</button><button class="btn warning big" onclick="endRound()" ${t.status === "idle" ? "disabled" : ""}>✓ Encerrar Round ${rn}</button>${t.status === "idle" ? `<p class="hint">Inicie o round para liberar a pontuação. <kbd>Espaço</kbd> inicia/pausa.</p>` : ""}
-      ${rn === 3 ? `<p class="hint">${m.r3 === "sudden" ? "<b>Morte súbita:</b> vence quem tirar o adversário da arena ou estourar os balões que restam dele (não são repostos). Se o tempo acabar sem decisão, a comissão decide." : "<b>Round 3 pela pontuação:</b> vence quem marcar mais neste round (balões não são repostos). Empate de novo: decisão da comissão."}</p>` : ""}`;
-  } else if (ph === "break") ctrl = `<button class="btn primary big" onclick="startRound2()">▶ Ir para o Round 2</button><p class="hint">Intervalo para ajustes nos robôs. Os pontos só podem ser corrigidos (↶ ou ✕).</p>`;
+      ${rn === 3 ? `<p class="hint">${m.r3 === "sudden" ? "<b>Morte súbita:</b> vence quem tirar o adversário da arena ou estourar os balões que restam dele (não são repostos). Se o tempo acabar sem decisão, a comissão decide." : "<b>Round 3 igual ao Round 2 (por pontuação):</b> vence quem marcar mais neste round (balões não são repostos). Empate de novo: decisão da comissão."}</p>` : ""}`;
+  } else if (ph === "break") ctrl = `<button class="btn primary big" onclick="startRound2()">▶ Ir para o Round ${m.toR3 ? 3 : 2}</button><p class="hint">Intervalo para ajustes nos robôs. Os pontos só podem ser corrigidos (↶ ou ✕).</p>`;
   else {
     const draw = kr ? !kr.winner : sa === sb;
-    const r3btn = kr?.needR3 ? `<div class="notice warn">Empate nos Rounds 1 e 2. Desempate: <b>${r3Label({ r3: cfg().koR3 })}</b> (até ${durTxt(cfg().cupR3)}), com os balões que sobraram — não são repostos.<div class="actions mt-s"><button class="btn primary big" onclick="startRound3()">▶ Jogar o Round 3 (${R3_NAME[cfg().koR3]})</button></div></div>` : "";
+    const r3btn = kr?.needR3 ? `<div class="notice warn">Empate nos Rounds 1 e 2. Desempate: <b>${esc(R3_DESC[cfg().koR3])}</b> — intervalo e Round 3 (até ${durTxt(r3Secs())}), com os balões que sobraram (não são repostos).<div class="actions mt-s"><button class="btn primary big" onclick="startRound3()">▶ Intervalo e Round 3 (${R3_NAME[cfg().koR3]})</button></div></div>` : "";
     const pick = draw && m.stage !== "prelim" && !kr?.needR3 ? `<div class="notice warn">${m.r3 ? `Round 3 sem decisão.` : "Empate em fase eliminatória."} Selecione o vencedor conforme decisão da Comissão Organizadora:<div class="actions mt-s">${[m.a, m.b].map(id => `<button class="btn ${m.pick === id ? "primary" : ""}" onclick="pickWinner('${esc(id)}')">${m.pick === id ? "✓ " : ""}${esc(teamName(id))}</button>`).join("")}</div></div>` : "";
     ctrl = `<div class="review">
       <div class="review-res">${draw ? "EMPATE" : `Vencedor: <b>${esc(teamName(kr ? kr.winner : sa > sb ? m.a : m.b))}</b>${kr?.r3 ? ` <span class="chip">${esc(r3Label(m))}</span>` : ""}`}</div>
@@ -2075,7 +2083,7 @@ function resultSheets() {
       ["Confronto Direto — confrontos encerrados", `${cs.done} de ${cs.total}`],
       ["Confronto Direto — pontuação", `${rulesCup()} · ${rulesCupTime()} · classificação pelo saldo de pontos`], ["Arena Livre — pontuação", `${rulesFree()} · ${cfg().freeSeconds} s por tentativa`], ["Confronto Direto — classificação", `Saldo de pontos; desempate: ${crits} → decisão da comissão`],
       ["Vencedor - Confronto Direto", champ ? champ.name : "A definir"], ["2º lugar - Confronto Direto", vice ? vice.name : "A definir"],
-      ["Classificação Geral — critério", `Arena Livre + Confronto Direto: ${geralCupTxt()}`], ["Fase eliminatória — chaveamento das semifinais", seedTxt()], ["Fase eliminatória — disputa de 3º lugar", cfg().cupThird ? "Sim" : "Não (3º lugar: perdedor de semifinal mais bem colocado no chaveamento)"], ["Fase eliminatória — empate", cfg().koR3 === "off" ? "Decisão da comissão" : `Round 3 (${R3_NAME[cfg().koR3]}, até ${durTxt(cfg().cupR3)}, sem repor balões); depois, decisão da comissão`],
+      ["Classificação Geral — critério", `Arena Livre + Confronto Direto: ${geralCupTxt()}`], ["Fase eliminatória — chaveamento das semifinais", seedTxt()], ["Fase eliminatória — disputa de 3º lugar", cfg().cupThird ? "Sim" : "Não (3º lugar: perdedor de semifinal mais bem colocado no chaveamento)"], ["Fase eliminatória — empate", cfg().koR3 === "off" ? "Decisão da comissão" : `${R3_DESC[cfg().koR3]}: intervalo + Round 3 até ${durTxt(r3Secs())}, sem repor balões; depois, decisão da comissão`],
       ["Classificação Geral — 1º lugar", gr[0] && (fs.done || cs.done) ? gr[0].team.name : "A definir"]] },
     { name: "Equipes", rows: [["Nº", "Equipe", "Escola", "Robô", "Professor(a)", "Integrantes", "Cor Arena Livre (nº)", "Cor Arena Livre"],
       ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
@@ -2221,7 +2229,7 @@ function sumulaCup() {
       dRow([dCell("TOTAL", W[0], { bold: true, size: 24, fill: DX.total }), dCell("", W[1], { fill: DX.total }), dCell("", W[2], { fill: DX.total })], 640)
     ]) +
     dPara([dRun("Resultado:  ", { bold: true }), dBox("Vitória da Equipe A"), dBox("Vitória da Equipe B"), dBox("Empate (só na fase preliminar)")], { before: 180, after: 80 }) +
-    (s.koR3 !== "off" && pg.ko !== false ? dPara([dRun(`Empate nos Rounds 1 e 2 (fase eliminatória) → Round 3 ${s.koR3 === "sudden" ? "MORTE SÚBITA" : "pela pontuação"} (até ${durTxt(s.cupR3)}, sem repor balões). Vencedor do Round 3: `, { size: 19 }), dRun("_".repeat(26), { color: DX.gray })], { after: 60 }) : "") +
+    (s.koR3 !== "off" && pg.ko !== false ? dPara([dRun(`Empate nos Rounds 1 e 2 (fase eliminatória) → intervalo e Round 3 ${s.koR3 === "sudden" ? "MORTE SÚBITA" : "igual ao Round 2 (por pontuação)"} (até ${durTxt(r3Secs())}, sem repor balões). Vencedor do Round 3: `, { size: 19 }), dRun("_".repeat(26), { color: DX.gray })], { after: 60 }) : "") +
     dPara([dRun(`Empate em semifinal/final${s.koR3 !== "off" ? " (depois do Round 3)" : ""} — vencedor por decisão da Comissão: `, { size: 19 }), dRun("_".repeat(30), { color: DX.gray })], { after: 140 }) +
     dPara(dRun("Ocorrências / falha técnica (round repetido? motivo):", { bold: true, size: 19 }), { after: 40 }) +
     dPara(dRun("_".repeat(84), { color: DX.gray }), { after: 40 }) + dPara(dRun("_".repeat(84), { color: DX.gray }), { after: 200 }) +
@@ -2425,9 +2433,9 @@ function xSetupForm() {
     <div><label>Equipe A</label><select name="a"><option value="" selected disabled>Escolha…</option>${tOpts("")}</select></div>
     <div><label>Equipe B</label><select name="b"><option value="" selected disabled>Escolha…</option>${tOpts("")}</select></div>
     <div class="full"><label>Regras do confronto</label><select name="rules"><option value="prelim">Como na fase preliminar (pode terminar empatado)</option><option value="ko">Como na fase eliminatória (empate → desempate abaixo)</option></select></div>
-    <div class="full"><label>Empate na fase eliminatória</label><select name="koR3"><option value="off" ${S.koR3 === "off" ? "selected" : ""}>Decisão da comissão</option><option value="sudden" ${S.koR3 === "sudden" ? "selected" : ""}>Round 3 morte súbita</option><option value="points" ${S.koR3 === "points" ? "selected" : ""}>Round 3 pela pontuação</option></select></div>
+    <div class="full"><label>Empate na fase eliminatória</label><select name="koR3"><option value="points" ${S.koR3 === "points" ? "selected" : ""}>Round 3 igual ao Round 2 (por pontuação)</option><option value="sudden" ${S.koR3 === "sudden" ? "selected" : ""}>Round 3 morte súbita</option><option value="off" ${S.koR3 === "off" ? "selected" : ""}>Decisão da comissão</option></select></div>
     <div><label>Round 1 (s)</label><input name="r1" type="number" min="5" max="900" value="${S.cupR1}"></div><div><label>Intervalo (s)</label><input name="brk" type="number" min="0" max="900" value="${S.cupBreak}"></div>
-    <div><label>Round 2 (s)</label><input name="r2" type="number" min="5" max="900" value="${S.cupR2}"></div><div><label>Round 3 (s)</label><input name="r3" type="number" min="5" max="900" value="${S.cupR3}"></div></div>
+    <div><label>Round 2 (s)</label><input name="r2" type="number" min="5" max="900" value="${S.cupR2}"></div><div><label>Round 3 morte súbita (s)</label><input name="r3" type="number" min="5" max="900" value="${S.cupR3}"></div></div>
     <p class="muted small mt-s">Tempos iniciais = configuração da competição (mudar aqui vale só para esta sessão). Pontuação e bipes iguais aos oficiais (${esc(rulesCup())}).</p>
     <div class="actions mt"><button class="btn primary big">▶ Chamar e iniciar confronto (sessão Extras)</button><button type="button" class="btn big" onclick="xNew(null)">← Voltar</button></div></form>`;
 }
@@ -2514,10 +2522,11 @@ function config() {
           <option value="1" ${s.cupThird ? "selected" : ""}>Sim — os perdedores das semifinais disputam o 3º lugar (antes da final) — padrão</option>
           <option value="0" ${s.cupThird ? "" : "selected"}>Não — 3º lugar fica com o perdedor de semifinal mais bem colocado no chaveamento</option></select></div>
         <div class="full"><label>Empate na fase eliminatória (Rounds 1 e 2 empatados)</label><select onchange="setSetting('koR3',this.value)">
-          <option value="off" ${s.koR3 === "off" ? "selected" : ""}>Sem Round 3 — decisão da comissão</option>
+          <option value="points" ${s.koR3 === "points" ? "selected" : ""}>Round 3 igual ao Round 2 (por pontuação: vence quem marcar mais) — padrão</option>
           <option value="sudden" ${s.koR3 === "sudden" ? "selected" : ""}>Round 3 MORTE SÚBITA — vence quem tirar o adversário da arena ou estourar os balões que restam dele</option>
-          <option value="points" ${s.koR3 === "points" ? "selected" : ""}>Round 3 pela pontuação — vence quem marcar mais no Round 3</option></select></div>
-        ${s.koR3 !== "off" ? `<div><label>Round 3 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR3}" onchange="setSetting('cupR3',this.value)"></div><div><p class="muted small">Só acontece se empatar. Os balões <b>não são repostos</b> (seguem os que sobraram). Sem decisão no Round 3: decisão da comissão.</p></div>` : ""}
+          <option value="off" ${s.koR3 === "off" ? "selected" : ""}>Sem Round 3 — decisão da comissão</option></select></div>
+        ${s.koR3 === "sudden" ? `<div><label>Round 3 morte súbita (segundos)</label><input type="number" min="5" max="900" value="${s.cupR3}" onchange="setSetting('cupR3',this.value)"></div>` : ""}
+        ${s.koR3 !== "off" ? `<div class="${s.koR3 === "sudden" ? "" : "full"}"><p class="muted small">Só na fase eliminatória e só se empatar: intervalo (${durTxt(s.cupBreak)}) e Round 3 (${durTxt(r3Secs())}${s.koR3 === "points" ? ", o mesmo tempo do Round 2" : ""}). Os balões <b>não são repostos</b> (seguem os que sobraram). Empate de novo / sem decisão: decisão da comissão.</p></div>` : ""}
         <div class="full"><label>Classificação Geral: pontos do Confronto Direto</label><select onchange="setSetting('geralCup',this.value)">
           <option value="prelim" ${s.geralCup === "prelim" ? "selected" : ""}>Só a fase preliminar (semifinais, 3º lugar e final não contam) — padrão</option>
           <option value="all" ${s.geralCup === "all" ? "selected" : ""}>Também a fase eliminatória (semifinais, 3º lugar e final somam)</option></select>
@@ -2696,7 +2705,7 @@ function timerTick(bg = false) {
   const m = liveMatch();
   if (m && m.timer.status === "running" && left(m.timer) <= 0) {
     m.timer.status = "over"; m.timer.remaining = 0; changed = true;
-    toast(`⏱ ${pre}` + (m.phase === "break" ? "Fim do intervalo — vá para o Round 2" : `Fim do Round ${phRound(m.phase) || 2}`));
+    toast(`⏱ ${pre}` + (m.phase === "break" ? `Fim do intervalo — vá para o Round ${m.toR3 ? 3 : 2}` : `Fim do Round ${phRound(m.phase) || 2}`));
   }
   if (bg) { if (changed) save(); return; }
   if (changed) { save(); render(); refreshTelaoFull(); } else if (prChanged) { render(); refreshTelaoFull(); } else updateTimers();
