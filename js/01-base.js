@@ -112,7 +112,7 @@ function defaultSettings() {
     sound: true, soundTv: false, beepVol: 10, autoBackup: true, cupGames: 0, cupV: 2,
     // bipes separados por prova; no Confronto Direto o intervalo não bipa (padrão)
     freeBeepStart: true, freeBeepMid: true, freeBeepMidAt: "5", freeBeepEnd: true,
-    cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "10", cupBeepEnd: true, cupBeepBreak: false,
+    cupBeepStart: true, cupBeepMid: true, cupBeepMidAt: "15", cupBeepEnd: true, cupBeepBreak: false,
     defV: 1,
     // Fase eliminatória: disputa de 3º lugar; chaveamento das semifinais ("geral" = Arena Livre + saldo da preliminar, "cup" = só o saldo da preliminar);
     // Round 3 de desempate só se empatar, sem repor balões: "points" = igual ao Round 2 (intervalo antes, tempo do Round 2,
@@ -222,7 +222,9 @@ function normalize(raw) {
     if (st.freeBeepMidAt === "10, 5") st.freeBeepMidAt = "5";
     if (st.cupBeepMidAt === "10, 5") st.cupBeepMidAt = "10";
   }
-  st.defV = 1;
+  // Atualização única: aviso do Confronto Direto passou de 10 s para 15 s (regulamento 5.4.3); valor personalizado não muda
+  if (!(num(rawSt.defV, 0) >= 2)) { if (st.cupBeepMidAt === "10") st.cupBeepMidAt = "15"; }
+  st.defV = 2;
   const rawTb = Array.isArray(st.tiebreak) ? st.tiebreak.filter(x => x && TIEBREAKS[x.key]) : [];
   // chave da lista como estava salva (inclui critérios que não existem mais), para reconhecer padrões antigos
   const rawKey = (Array.isArray(st.tiebreak) ? st.tiebreak : []).filter(x => x && x.key).map(x => x.key + (x.on ? 1 : 0)).join();
@@ -363,7 +365,7 @@ function logEv(msg) {
   state.log.push({ at: new Date().toISOString(), msg, by: operator() || undefined });
   if (state.log.length > 3000) state.log.splice(0, state.log.length - 3000);
 }
-/* Sons: bipe de início, bipe curto intermediário (Arena aos 5 s, Confronto aos 10 s), sinal longo no fim. O navegador só libera
+/* Sons: bipe de início, bipe curto intermediário (Arena aos 5 s, Confronto aos 15 s), sinal longo no fim. O navegador só libera
    o áudio depois de um clique na página. */
 let audioCtx = null;
 function getAudio() {
