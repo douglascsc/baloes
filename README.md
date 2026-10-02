@@ -19,6 +19,7 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e Vencedor - Confronto Direto. |
 | **Classificação Geral** | Soma da Arena Livre com o saldo (pontos marcados) da fase preliminar do Confronto Direto. Semifinais, 3º lugar e final não contam (padrão; em Config. dá para incluir a fase eliminatória). |
+| **Extras** | Testes e registros **fora da competição**: sessões avulsas de Arena Livre ou Confronto Direto com os mesmos cronômetros, "Preparar", bipes, rounds e controles do jogo, mas totalmente isoladas (veja abaixo). |
 | **Pódio** | Três pódios separados (Confronto Direto, Classificação Geral e Arena Livre), cada um com botão para mostrar no telão. |
 | **Cronograma** | Programação do dia: incluir, editar e excluir atividades (horário, atividade e detalhamento). A atividade em andamento é destacada pelo relógio, aparece no Início e pode ser exibida no telão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
@@ -130,3 +131,11 @@ Cada marcação guarda os pontos do momento: mudar a regra não altera o que já
 - `Sumula-Arena-Livre.docx`: uma página por rodada (1 a 5), já com as 7 equipes e escolas.
 
 Para regerar (ex.: mudou alguma equipe): `npm install docx` e depois `node sumulas/gerar-sumulas.js`.
+
+## Extras (testes e registros fora da competição)
+- Guia **🧪 Extras** no fim do menu. Escolha **Arena Livre** ou **Confronto Direto**, a finalidade (**Teste** ou **Registro fora da competição**), as equipes (as cadastradas ou "Equipe Teste A/B") e, se quiser, os tempos só para aquela sessão.
+- Usa as mesmas telas e funções do jogo oficial: Iniciar, "Preparar", bipes, ±5 s, marcações, desfazer, Round 1 → intervalo → Round 2 (→ Round 3 de desempate), encerramento automático por balões/saída, conferência e resultado. Há uma prévia do telão só na própria tela.
+- A faixa roxa **MODO EXTRAS — NÃO É RODADA OFICIAL** fica visível o tempo todo.
+- **🏁 Finalizar sessão** para o cronômetro da sessão, guarda o resultado no **Histórico de Extras** e volta ao início de Extras. **🆕 Nova sessão** começa do zero (se houver uma sessão em andamento, ela é guardada como interrompida).
+- **Isolamento:** a sessão trabalha numa cópia própria das equipes, cores e configurações. Nada vai para o placar, classificações, pódio, histórico oficial, planilha, súmulas, backup JSON, telão ou servidor do telão em rede. Os dados de Extras ficam numa chave separada do navegador (`robosapiens_estoura_baloes_EXTRAS_v1`), apagada também pelo "Zerar este computador".
+- Se houver uma tentativa ou confronto **oficial** em andamento, ele continua normalmente em segundo plano (cronômetro e bipes); para operá-lo, volte à guia dele pelo menu.

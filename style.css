@@ -509,3 +509,19 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .tv-prep{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9cqw;font-weight:900;letter-spacing:.4cqw;color:#fff;background:rgba(16,24,18,.82);padding:1.5cqw 4cqw;border-radius:2cqw;z-index:3}
 .tv-seed{font-size:1.5cqw;color:#5f6b64;font-weight:700}
 .seed-note{margin:-4px 0 10px}
+/* Extras: testes e registros fora da competição */
+.nav-sep{height:1px;background:var(--line);margin:8px 6px}
+.nav-btn.nav-extras.active{background:#f1e8fb;color:#5b21b6}
+body.x-mode .main{background:repeating-linear-gradient(135deg,#faf7fe 0 22px,#f4eefc 22px 44px)}
+body.x-mode .event-badge strong:after{content:" · MODO EXTRAS";color:#6d28d9}
+.x-banner{display:flex;flex-direction:column;gap:4px;margin:0 0 14px;padding:14px 18px;border-radius:var(--radius);background:#6d28d9;color:#fff;border:3px dashed #fff;box-shadow:0 0 0 3px #6d28d9}
+.x-banner b{font-size:22px;letter-spacing:.5px}
+.x-banner span{font-size:13px;opacity:.95}
+.x-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.x-ctrl .grow{flex:1}
+.x-pick{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 18px;text-align:center;cursor:pointer;border:2px solid var(--arena);font:inherit;color:inherit}
+.x-pick.cup{border-color:var(--cup)}
+.x-pick span{font-size:44px}.x-pick b{font-size:20px}.x-pick small{color:var(--muted)}
+.x-pick:hover{box-shadow:0 6px 22px rgba(25,50,35,.12)}
+.x-rec{border-bottom:1px solid var(--line2);padding:8px 0}
+.x-rec summary{cursor:pointer}
