@@ -83,13 +83,13 @@ function config() {
         </div>`).join("")}
         <div class="beep-opts ${s.sound || s.soundTv ? "" : "off"}"><b class="beep-title">📣 "PREPARAR" antes do bipe de início (Arena Livre e cada round)</b>
           <select onchange="setSetting('prepMode',this.value)" aria-label="Som do Preparar">
-            <option value="voz" ${s.prepMode === "voz" ? "selected" : ""}>Voz gravada "Preparar!" (português) — mesmo volume do bipe</option>
+            <option value="pc" ${s.prepMode === "pc" ? "selected" : ""}>Voz do computador falando "Preparar" (português) — padrão</option>
             <option value="som" ${s.prepMode === "som" ? "selected" : ""}>Som enviado por mim — ajustado ao volume do bipe</option>
-            <option value="pc" ${s.prepMode === "pc" ? "selected" : ""}>Voz do computador (Windows) — volume não acompanha o bipe</option>
+            <option value="voz" ${s.prepMode === "voz" ? "selected" : ""}>Voz gravada embutida (sintética) — mesmo volume do bipe</option>
             <option value="off" ${s.prepMode === "off" ? "selected" : ""}>Desligado (bipe de início na hora)</option></select>
           ${s.prepMode !== "off" ? `<div class="beep-at"><input type="number" min="1" max="10" value="${s.prepDelay}" onchange="setSetting('prepDelay',this.value)" aria-label="Segundos entre o Preparar e o bipe de início"><span class="muted small">segundos entre o "Preparar" e o bipe de início (o tempo só começa a correr no bipe)</span></div>` : ""}
-          ${s.prepMode === "pc" ? (() => { const v = ptVoice(); return v ? `<p class="muted small">Voz encontrada: <b>${esc(v.name)}</b>.</p>` : `<p class="muted small">⚠️ Nenhuma voz em português encontrada neste navegador${window.speechSynthesis ? " (pode demorar uns segundos para carregar)" : ""}. No Edge/Chrome do Windows costuma existir; se não falar, envie um som.</p>`; })() : ""}
-          ${s.prepMode === "som" && !prepAudio() ? `<p class="muted small">⚠️ Nenhum som enviado ainda: enquanto isso, usa a voz gravada.</p>` : ""}
+          ${s.prepMode === "pc" ? (() => { const v = ptVoice(); return v ? `<p class="muted small">Voz encontrada: <b>${esc(v.name)}</b>. O volume dela é o do Windows: se ficar mais baixa que o bipe, diminua o "Volume dos bipes" ou aumente o volume do Windows.</p>` : `<p class="muted small">⚠️ Nenhuma voz em português encontrada neste navegador${window.speechSynthesis ? " (pode demorar uns segundos para carregar)" : ""}. No Edge/Chrome do Windows costuma existir; se não falar, envie um som.</p>`; })() : ""}
+          ${s.prepMode === "som" && !prepAudio() ? `<p class="muted small">⚠️ Nenhum som enviado ainda: enquanto isso, usa a voz do computador.</p>` : ""}
           ${s.prepMode === "voz" || s.prepMode === "som" ? `<p class="muted small">O "Preparar" é normalizado e comprimido para soar no mesmo volume do bipe e acompanha o controle "Volume dos bipes".</p>` : ""}
           <div class="actions mt-s"><label class="btn small file">⬆ ${prepAudio() ? "Trocar o som" : "Enviar um som"} (mp3, wav…)<input id="prepFile" type="file" accept="audio/*" hidden></label>${prepAudio() ? `<button class="btn small" onclick="removePrep()">🗑 Remover som enviado</button>` : ""}<button class="btn small" onclick="getAudio();playPrep(true)">🔈 Testar "Preparar"</button></div>
           <p class="muted small">O som enviado fica guardado só neste navegador (não vai no backup JSON; um telão em outro PC usa a voz gravada).</p></div>

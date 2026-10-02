@@ -123,7 +123,7 @@ function defaultSettings() {
     // vence quem marcar mais) — padrão; "sudden" = morte súbita (tempo cupR3); "off" = decisão da comissão
     cupThird: true, koSeed: "geral", koR3: "points", cupR3: 60, r3V: 1,
     // "Preparar" antes do bipe de início: "voz" (voz do computador em português), "som" (arquivo enviado) ou "off"; espera em segundos até o bipe
-    prepMode: "voz", prepDelay: 2,
+    prepMode: "pc", prepDelay: 2, prepV: 1, // "pc" = voz do computador (padrão), "voz" = voz gravada embutida, "som" = arquivo enviado
     // backup automático periódico (JSON na pasta Downloads), em minutos; 0 = desligado
     backupMin: 15,
     // PIN dos juízes pelo celular (vazio = desligado); o servidor nunca envia o PIN para a rede
@@ -199,7 +199,9 @@ function normalize(raw) {
   st.koR3 = ["sudden", "points", "off"].includes(st.koR3) ? st.koR3 : "points";
   // Atualização única: o padrão passou a ser o Round 3 igual ao Round 2 (antes era decisão da comissão)
   if (!(num(s.settings?.r3V, 0) >= 1)) { if (st.koR3 === "off") st.koR3 = "points"; } st.r3V = 1;
-  st.prepMode = ["voz", "som", "pc", "off"].includes(st.prepMode) ? st.prepMode : "voz";
+  st.prepMode = ["voz", "som", "pc", "off"].includes(st.prepMode) ? st.prepMode : "pc";
+  // Atualização única: o padrão voltou a ser a voz do computador (a voz gravada ficou estranha); quem estava nela volta
+  if (!(num(s.settings?.prepV, 0) >= 1)) { if (st.prepMode === "voz") st.prepMode = "pc"; } st.prepV = 1;
   const clampI = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(num(v, d))));
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
@@ -414,7 +416,7 @@ function b64Bytes(b64) { const s = atob(b64), u = new Uint8Array(s.length); for 
 function prepSource() {
   const up = cfg().prepMode === "som" ? prepAudio() : "";
   if (up) return { key: "up:" + up.length + ":" + up.slice(-40), bytes: () => b64Bytes(up.slice(up.indexOf(",") + 1)) };
-  return window.PREP_VOZ ? { key: "voz", bytes: () => b64Bytes(window.PREP_VOZ) } : null;
+  return cfg().prepMode === "voz" && window.PREP_VOZ ? { key: "voz", bytes: () => b64Bytes(window.PREP_VOZ) } : null; // sem som: voz do computador
 }
 function prepBuffer(c, src) {
   if (!prepBuffers.has(src.key)) prepBuffers.set(src.key, new Promise(res => {
@@ -471,7 +473,7 @@ function uploadPrep(e) {
   };
   r.readAsDataURL(f);
 }
-function removePrep() { try { localStorage.removeItem(PREP_KEY); } catch (e) { /* segue */ } if (state.settings.prepMode === "som") state.settings.prepMode = "voz"; logEv("Som do \"Preparar\" removido (volta à voz gravada)"); save(); render(); }
+function removePrep() { try { localStorage.removeItem(PREP_KEY); } catch (e) { /* segue */ } if (state.settings.prepMode === "som") state.settings.prepMode = "pc"; logEv("Som do \"Preparar\" removido (volta à voz gravada)"); save(); render(); }
 const beeped = new Set();
 // kind: "free" (Arena Livre) ou "cup" (Confronto Direto); phase: fase do confronto
 function countdownBeep(t, kind = "free", phase = "") {
