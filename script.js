@@ -118,6 +118,8 @@ function defaultSettings() {
     cupThird: true, koSeed: "geral", koR3: "points", cupR3: 60, r3V: 1,
     // "Preparar" antes do bipe de início: "voz" (voz do computador em português), "som" (arquivo enviado) ou "off"; espera em segundos até o bipe
     prepMode: "voz", prepDelay: 2,
+    // backup automático periódico (JSON na pasta Downloads), em minutos; 0 = desligado
+    backupMin: 15,
     // Classificação Geral: geralCup "prelim" = só a fase preliminar do Confronto; "all" = também semifinais, 3º lugar e final
     // Classificação pelo SALDO de pontos (não há pontos de vitória/empate/derrota).
     // Desempate definido pela organização: confronto direto → número de vitórias → numeração do sorteio → decisão da comissão
@@ -146,7 +148,9 @@ function normTeam(t, i) {
   return {
     id: sid(t.id) || uid(), number: Number.isFinite(Number(t.number)) && Number(t.number) >= 1 && t.number !== null && t.number !== "" ? Math.round(Number(t.number)) : null,
     name: str(t.name) || `Equipe ${String(i + 1).padStart(2, "0")}`, school: str(t.school),
-    robot: str(t.robot), professor: str(t.professor), members: str(t.members)
+    robot: str(t.robot), professor: str(t.professor), members: str(t.members),
+    // desclassificação (5.7.6): a equipe sai das classificações; os pontos dos adversários contra ela ficam
+    disq: t.disq && typeof t.disq === "object" ? { at: str(t.disq.at), reason: str(t.disq.reason) || "não informado" } : undefined
   };
 }
 function normTimer(t, dur) {
@@ -192,6 +196,7 @@ function normalize(raw) {
   st.freeOther = clampI(st.freeOther, 0, 1000, 50); st.freeOwn = clampI(st.freeOwn, 0, 1000, 50); st.freeExit = clampI(st.freeExit, 0, 1000, 30);
   st.cupR1 = clampI(st.cupR1, 5, 900, ROUND1_SECONDS); st.cupBreak = clampI(st.cupBreak, 0, 900, BREAK_SECONDS); st.cupR2 = clampI(st.cupR2, 5, 900, ROUND2_SECONDS);
   st.cupBalloon = clampI(st.cupBalloon, 0, 1000, 100); st.cupExit = clampI(st.cupExit, 0, 1000, 30); st.cupBalloons = clampI(st.cupBalloons, 1, 10, 2); st.beepVol = clampI(st.beepVol, 1, 10, 10); st.freeArenaBalloons = clampI(st.freeArenaBalloons, 1, 99, 9);
+  st.backupMin = [0, 10, 15, 30].includes(Number(st.backupMin)) ? Number(st.backupMin) : 15;
   st.cupR3 = clampI(st.cupR3, 5, 900, 60); st.prepDelay = clampI(st.prepDelay, 1, 10, 2);
   delete st.winPts; delete st.drawPts; delete st.lossPts; // a fase preliminar não usa pontos de vitória/empate/derrota
   st.cupGames = [0, 2, 4, 6].includes(Number(st.cupGames)) ? Number(st.cupGames) : 0;
@@ -230,7 +235,8 @@ function normalize(raw) {
   s.free = {
     attempts: (Array.isArray(f.attempts) ? f.attempts : []).filter(a => a && ids.has(sid(a.teamId))).map(a => ({
       id: sid(a.id) || uid(), teamId: sid(a.teamId), round: Math.max(1, Math.round(num(a.round, 1))),
-      color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at), repeats: normRepeats(a.repeats)
+      color: normColorSnap(a.color), events: normEvents(a.events), at: str(a.at), repeats: normRepeats(a.repeats),
+      wo: a.wo && typeof a.wo === "object" ? { reason: str(a.wo.reason) } : undefined // ausência (W.O.): 0 ponto
     })),
     current: null, draws: {}
   };
@@ -252,6 +258,8 @@ function normalize(raw) {
       // Round 3 de desempate (fase eliminatória): modo jogado e quem venceu na morte súbita
       r3: ["sudden", "points"].includes(m.r3) ? m.r3 : undefined, r3Winner: ids.has(sid(m.r3Winner)) ? sid(m.r3Winner) : undefined,
       toR3: !!m.toR3 && m.phase === "break", // intervalo antes do Round 3
+      // W.O.: ausência, ambas ausentes, abandono ou desclassificação (o vencedor fica em m.winner)
+      wo: m.wo && ["absent", "both", "abandon", "disq"].includes(m.wo.type) ? { type: m.wo.type, side: ["a", "b"].includes(m.wo.side) ? m.wo.side : null, reason: str(m.wo.reason) } : undefined,
       winner: m.winner === "draw" ? "draw" : ids.has(sid(m.winner)) ? sid(m.winner) : null,
       pick: ids.has(sid(m.pick)) ? sid(m.pick) : null, byDecision: !!m.byDecision,
       _backup: typeof m._backup === "string" ? m._backup : undefined, repeats: normRepeats(m.repeats),
@@ -282,7 +290,7 @@ function normalize(raw) {
     if (i >= 0) s.schedule.splice(i, 1, ...LUNCH_SCHEDULE.map(([start, end, title, detail]) => ({ id: uid(), start, end, title, detail })));
   }
   s.schedV = 3;
-  s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
+  s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg), by: str(x.by) || undefined })).slice(-3000);
   const an = s.display?.anim;
   s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores", "podio-cup", "podio-geral", "podio-arena", "extras"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal,
     anim: an && ["numeros", "cores"].includes(an.kind) && Array.isArray(an.order) ? { kind: an.kind, at: num(an.at, 0), order: an.order.map(sid).filter(id => ids.has(id)) } : null };
@@ -311,9 +319,14 @@ function load() {
 let state = load();
 state.view = "inicio"; // o sistema sempre abre no Início (não volta para a última tela usada)
 let RESETTING = false;
+/* Backup automático periódico: guarda o horário do último backup (deste PC) e se houve mudança desde então */
+const BK_KEY = "robosapiens_estoura_baloes_backup";
+const BK = { last: (() => { try { return num(JSON.parse(localStorage.getItem(BK_KEY) || "{}").last, 0); } catch (e) { return 0; } })(), dirty: false };
+function markBackup() { BK.last = Date.now(); BK.dirty = false; try { localStorage.setItem(BK_KEY, JSON.stringify({ last: BK.last })); } catch (e) { /* segue */ } updateBkPill(); }
 function save() {
   if (TELAO_WINDOW || RESETTING) return;
   if (XMODE) return saveExtras(); // sessão Extras: nunca grava na chave oficial nem envia ao servidor
+  BK.dirty = true;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { warn("Não foi possível salvar no navegador (armazenamento cheio ou bloqueado). Exporte um backup em Configurações."); }
   if (NET.on && NET.local) { clearTimeout(NET.timer); NET.timer = setTimeout(pushState, 120); }
 }
@@ -337,9 +350,13 @@ function toast(msg, type = "ok") {
 // Aviso (ação recusada/atenção): fica mais tempo e com cor de alerta
 const warn = msg => toast(msg, "warn");
 // Histórico de alterações (vai também para a planilha Excel)
+/* Operador deste computador (Config. e janelas de correção): vai junto em cada registro do histórico */
+const OPER_KEY = "robosapiens_estoura_baloes_operador";
+function operator() { try { return str(localStorage.getItem(OPER_KEY)).slice(0, 60); } catch (e) { return ""; } }
+function setOperator(v) { try { const n = str(v).slice(0, 60); if (n) localStorage.setItem(OPER_KEY, n); else localStorage.removeItem(OPER_KEY); } catch (e) { /* segue */ } }
 function logEv(msg) {
   if (TELAO_WINDOW) return;
-  state.log.push({ at: new Date().toISOString(), msg });
+  state.log.push({ at: new Date().toISOString(), msg, by: operator() || undefined });
   if (state.log.length > 3000) state.log.splice(0, state.log.length - 3000);
 }
 /* Sons: bipe de início, bipe curto intermediário (Arena aos 5 s, Confronto aos 10 s), sinal longo no fim. O navegador só libera
@@ -507,6 +524,9 @@ function adjBtns(kind, t) {
 
 /* ============================ EQUIPES / CORES ============================ */
 const teams = () => state.teams;
+// equipes em disputa (sem as desclassificadas): usadas nas filas, classificações e chaveamento
+const activeTeams = () => state.teams.filter(t => !t.disq);
+const isDisq = id => !!findTeam(id)?.disq;
 // Equipes sem numeração (antes do sorteio) ficam por último, em ordem alfabética
 const numKey = t => (t && t.number) ? t.number : 1e9;
 const byNum = (a, b) => numKey(a) - numKey(b) || a.name.localeCompare(b.name);
@@ -549,7 +569,7 @@ function render() {
   document.querySelectorAll(".nav-btn").forEach(b => { b.classList.toggle("active", b.dataset.view === v); if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   ({ inicio, crono, equipes, cores, arena, confrontos, geral, podio, telao, config, extras })[v]();
   document.querySelectorAll("#main thead th").forEach(th => th.setAttribute("scope", "col"));
-  updateTvPill();
+  updateTvPill(); updateBkPill();
   updateTimers();
 }
 const MODE_TAGS = { arena: "🎈 ARENA LIVRE · classificação própria", cup: "⚔️ CONFRONTO DIRETO · classificação própria", geral: "🏆 ARENA LIVRE + CONFRONTO DIRETO" };
@@ -661,7 +681,8 @@ function equipes() {
       <div class="team-school"><span class="school-label">ESCOLA</span>${esc(schoolText(t))}</div>
       ${t.robot || t.professor ? `<div class="team-meta">${t.robot ? `<span>🤖 Robô: ${esc(t.robot)}</span>` : ""}${t.professor ? `<span>👨‍🏫 ${esc(t.professor)}</span>` : ""}</div>` : ""}
       ${t.members ? `<div class="team-members"><span class="school-label">INTEGRANTES</span>${esc(t.members)}</div>` : ""}
-      <div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button><button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>
+      ${t.disq ? `<div class="notice warn mt-s">🚫 <b>Desclassificada</b> · ${esc(t.disq.reason)} <span class="muted small">(${esc(fmtDate(t.disq.at))})</span></div>` : ""}
+      <div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button>${started ? (t.disq ? `<button class="btn small" onclick="undoDisqualify('${esc(t.id)}')">↺ Reverter desclassificação</button>` : `<button class="btn small danger" onclick="disqualify('${esc(t.id)}')">🚫 Desclassificar</button>`) : ""}<button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>
     </div>`).join("");
   main().innerHTML = head("Equipes", `${teams().length} equipes cadastradas.`,
     `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="showOnTv('numeros')">📺 Mostrar no telão</button><button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
@@ -783,7 +804,7 @@ function attemptTotal(a) {
 function attemptOf(teamId, round) { return state.free.attempts.find(a => a.teamId === teamId && a.round === round) || null; }
 function freeQueue() {
   const R = state.settings.freeRounds, list = [];
-  for (let r = 1; r <= R; r++) sortedTeams().forEach(t => {
+  for (let r = 1; r <= R; r++) sortedTeams().filter(t => !t.disq).forEach(t => {
     const att = attemptOf(t.id, r), cur = state.free.current;
     list.push({ teamId: t.id, round: r, attempt: att, current: !!(cur && cur.teamId === t.id && cur.round === r) });
   });
@@ -791,8 +812,8 @@ function freeQueue() {
 }
 function nextFree() { return freeQueue().find(q => !q.attempt && !q.current) || null; }
 function freeSummary() {
-  const total = teams().length * state.settings.freeRounds;
-  const done = state.free.attempts.filter(a => a.round <= state.settings.freeRounds && findTeam(a.teamId)).length;
+  const total = activeTeams().length * state.settings.freeRounds;
+  const done = state.free.attempts.filter(a => a.round <= state.settings.freeRounds && findTeam(a.teamId) && !isDisq(a.teamId)).length;
   return { total, done };
 }
 function currentFreeRound() { const q = freeQueue().find(x => !x.attempt); return q ? q.round : state.settings.freeRounds; }
@@ -889,6 +910,18 @@ function freeFinish() {
   const fs = freeSummary();
   if (fs.total && fs.done >= fs.total) { autoBackup("apos-arena-livre", "Arena Livre concluída"); checkProgress(); render(); }
 }
+// Ausência na chamada (5.7.5): tentativa registrada com 0 ponto
+function freeWO() {
+  const cur = state.free.current; if (!cur) return;
+  if (cur.timer.status !== "idle") return warn("A tentativa já começou: registre o resultado normalmente.");
+  const reason = prompt(`${teamName(cur.teamId)} AUSENTE (W.O.) na Rodada ${cur.round}?\nA tentativa será registrada com 0 ponto.\n\nMotivo / observação:`, "equipe não se apresentou");
+  if (reason === null) return;
+  state.free.attempts.push({ id: cur.id, teamId: cur.teamId, round: cur.round, color: cur.color, events: [], repeats: cur.repeats || [], at: new Date().toISOString(), wo: { reason: str(reason) } });
+  logEv(`Arena Livre: ${teamName(cur.teamId)} — Rodada ${cur.round}: ausente (W.O.), 0 ponto${str(reason) ? `. Motivo: ${str(reason)}` : ""}`);
+  state.free.current = null; save(); toast("Ausência registrada (0 ponto)"); render();
+  const fs = freeSummary();
+  if (fs.total && fs.done >= fs.total) { autoBackup("apos-arena-livre", "Arena Livre concluída"); checkProgress(); render(); }
+}
 function freeCancel() {
   const cur = state.free.current; if (!cur) return;
   if ((cur.events.length || cur.timer.status !== "idle") && !confirm("Cancelar esta tentativa? As marcações dela serão descartadas e a equipe volta para a fila.")) return;
@@ -906,13 +939,22 @@ function freeRepeat() {
   cur.events = []; cur.timer = newTimer(state.settings.freeSeconds);
   save(); toast("Tentativa zerada para repetição"); render();
 }
+// Campos obrigatórios das correções: motivo e quem está corrigindo (o nome fica salvo neste PC)
+const fixFields = () => `<div class="form-grid mt-s"><div><label>Motivo da correção (obrigatório)</label><input name="fixWhy" maxlength="200" required placeholder="ex.: súmula assinada mostra 3 balões"></div>
+  <div><label>Operador (quem está corrigindo)</label><input name="fixBy" maxlength="60" required value="${esc(operator())}" placeholder="seu nome"></div></div>`;
+function fixRead(F) {
+  const why = str(F.elements.fixWhy.value), by = str(F.elements.fixBy.value);
+  if (!why) { fieldErr(F, "fixWhy", "Informe o motivo da correção."); return null; }
+  if (!by) { fieldErr(F, "fixBy", "Informe quem está corrigindo."); return null; }
+  setOperator(by); return why;
+}
 // Corrige uma tentativa já registrada: o operador informa as quantidades certas de cada marcação
 function freeEdit(id) {
   const a = state.free.attempts.find(x => x.id === id); if (!a) return;
   const evs = freeEvents(), cnt = l => a.events.filter(e => e.label === l).length;
   openModal(`<h2>Corrigir tentativa</h2><p class="muted">${esc(teamName(a.teamId))} · Rodada ${a.round} · atual: <b>${signed(attemptTotal(a))}</b></p>
     <form id="freeEditF"><div class="form-grid">${evs.map((e, i) => `<div><label>${e.icon} ${esc(e.label)} (${e.short})</label><input name="e${i}" type="number" min="0" max="99" value="${cnt(e.label)}"></div>`).join("")}</div>
-    <p class="mt-s">Nova pontuação: <b id="freeEditTot"></b></p>
+    <p class="mt-s">Nova pontuação: <b id="freeEditTot"></b></p>${fixFields()}
     <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   const F = document.getElementById("freeEditF");
   const counts = () => evs.map((_, i) => Math.max(0, Math.min(99, Math.round(num(F.elements["e" + i].value, 0)))));
@@ -928,9 +970,9 @@ function freeEdit(id) {
   const upd = () => { document.getElementById("freeEditTot").textContent = signed(attemptTotal({ ...a, events: build() })); };
   F.oninput = upd; upd();
   F.onsubmit = ev => {
-    ev.preventDefault(); const before = attemptTotal(a);
-    a.events = build();
-    logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}`);
+    ev.preventDefault(); const why = fixRead(F); if (why === null) return; const before = attemptTotal(a);
+    a.events = build(); if (a.events.length) delete a.wo;
+    logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}) corrigida: ${signed(before)} → ${signed(attemptTotal(a))}. Motivo: ${why}`);
     resyncSemis();
     save(); closeModal(); toast("Tentativa corrigida"); render();
   };
@@ -946,10 +988,11 @@ function freeVoid(id) {
   const a = state.free.attempts.find(x => x.id === id); if (!a) return;
   const reason = prompt(`Anular a tentativa de ${teamName(a.teamId)} na Rodada ${a.round} (${signed(attemptTotal(a))})?\nA equipe volta para a fila dessa rodada.\n\nMotivo (ex.: falha técnica):`, "");
   if (reason === null) return;
-  logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}, ${signed(attemptTotal(a))}) anulada. Motivo: ${str(reason) || "não informado"}`);
+  if (!str(reason)) return warn("Informe o motivo para anular a tentativa.");
+  logEv(`Arena Livre: tentativa de ${teamName(a.teamId)} (Rodada ${a.round}, ${signed(attemptTotal(a))}) anulada. Motivo: ${str(reason)}`);
   state.free.attempts = state.free.attempts.filter(x => x.id !== id); save(); toast("Tentativa anulada"); render();
 }
-function roundComplete(r) { return teams().length > 0 && teams().every(t => attemptOf(t.id, r)); }
+function roundComplete(r) { return activeTeams().length > 0 && activeTeams().every(t => attemptOf(t.id, r)); }
 function lastCompleteRound() { let r = 0; while (r < 5 && roundComplete(r + 1)) r++; return r; }
 function closeArena() {
   const r = lastCompleteRound();
@@ -970,7 +1013,7 @@ function reopenArena() {
 }
 function freeRanking() {
   const R = state.settings.freeRounds;
-  return sortedTeams().map(t => {
+  return sortedTeams().filter(t => !t.disq).map(t => {
     const scores = []; for (let r = 1; r <= R; r++) { const a = attemptOf(t.id, r); scores.push(a ? attemptTotal(a) : null); }
     const vals = scores.filter(v => v !== null);
     const sum = vals.reduce((s, v) => s + v, 0), best = vals.length ? Math.max(...vals) : 0;
@@ -1036,7 +1079,7 @@ function freeStage(cur) {
       <button class="btn warning big grow" onclick="freeFinish()" ${tm.status === "idle" ? "disabled" : ""}>✓ Registrar resultado</button>
     </div>
     <div class="log">${cur.events.slice().reverse().map(e => `<div class="log-item"><span>${esc(e.t)} · ${esc(e.label)}</span><b class="${e.pts >= 0 ? "plus" : "minus"}">${signed(e.pts)}</b><button class="x" title="Remover esta marcação" aria-label="Remover esta marcação" onclick="freeRemoveEvent('${esc(e.id)}')">✕</button></div>`).join("") || `<div class="muted small">Nenhuma marcação ainda.</div>`}</div>
-    <div class="right"><button class="btn small ghost" onclick="freeRepeat()">🔁 Repetir tentativa (falha técnica)</button><button class="btn small ghost" onclick="freeCancel()">✕ Cancelar tentativa</button></div>
+    <div class="right">${tm.status === "idle" && !XMODE ? `<button class="btn small ghost" onclick="freeWO()">🚫 Ausente (W.O.)</button>` : ""}<button class="btn small ghost" onclick="freeRepeat()">🔁 Repetir tentativa (falha técnica)</button><button class="btn small ghost" onclick="freeCancel()">✕ Cancelar tentativa</button></div>
   </div>`;
 }
 function freeQueueCard() {
@@ -1048,7 +1091,7 @@ function freeQueueCard() {
       const t = findTeam(x.teamId);
       let chip, act = "";
       if (x.current) chip = `<span class="chip live">● Em arena</span>`;
-      else if (x.attempt) { chip = `<span class="chip done">✓ ${reveal ? signed(attemptTotal(x.attempt)) : "Jogou"}</span>`; act = `<button class="btn tiny" onclick="freeEdit('${esc(x.attempt.id)}')" title="Corrigir esta tentativa" aria-label="Corrigir a tentativa de ${esc(t?.name)} na Rodada ${r}">✏️</button>`; }
+      else if (x.attempt) { chip = x.attempt.wo ? `<span class="chip out">W.O. (ausente)</span>` : `<span class="chip done">✓ ${reveal ? signed(attemptTotal(x.attempt)) : "Jogou"}</span>`; act = `<button class="btn tiny" onclick="freeEdit('${esc(x.attempt.id)}')" title="Corrigir esta tentativa" aria-label="Corrigir a tentativa de ${esc(t?.name)} na Rodada ${r}">✏️</button>`; }
       else {
         chip = next && next.teamId === x.teamId && next.round === r ? `<span class="chip next">Próxima</span>` : `<span class="chip wait">Na fila</span>`;
         if (!cur && drawOf(x.teamId)) act = `<button class="btn tiny" onclick="callTeam('${esc(x.teamId)}',${r})">Chamar</button>`;
@@ -1165,7 +1208,7 @@ function emptyMatch(stage, order, a, b) {
   return { id: uid(), stage, order, a, b, status: "pending", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, winner: null, pick: null, byDecision: false };
 }
 function generatePrelim() {
-  const list = sortedTeams();
+  const list = sortedTeams().filter(t => !t.disq);
   if (list.length < 4) return warn("São necessárias pelo menos 4 equipes.");
   if (list.some(t => !t.number) && !confirm("Há equipes sem numeração (Equipe XX).\nRecomendado: sortear a numeração antes (tela Equipes).\n\nGerar mesmo assim? A ordem seguirá a ordem alfabética das equipes sem número.")) return;
   if (state.cup.matches.length && !confirm("Gerar a fase preliminar novamente?\n\nTODOS os confrontos e resultados (incluindo semifinais e final) serão apagados.")) return;
@@ -1183,22 +1226,27 @@ function prelimStats() {
   const map = {};
   [...ids].forEach(id => { map[id] = { team: findTeam(id), J: 0, V: 0, E: 0, D: 0, PM: 0, PS: 0, SG: 0, total: prelims().filter(m => m.a === id || m.b === id).length }; });
   prelims().filter(m => m.status === "done").forEach(m => {
-    const sa = sideScore(m, "a"), sb = sideScore(m, "b"), A = map[m.a], B = map[m.b];
+    const sa = sideScore(m, "a"), sb = sideScore(m, "b"), A = map[m.a], B = map[m.b], o = outcome(m);
     A.J++; B.J++; A.PM += sa; A.PS += sb; B.PM += sb; B.PS += sa;
-    if (sa > sb) { A.V++; B.D++; }
-    else if (sb > sa) { B.V++; A.D++; }
+    if (o === "a") { A.V++; B.D++; }
+    else if (o === "b") { B.V++; A.D++; }
     else { A.E++; B.E++; }
   });
   // Saldo (definido pela organização) = soma dos pontos marcados pela equipe nos confrontos (não desconta os sofridos)
   Object.values(map).forEach(s => { s.SG = s.PM; });
-  return Object.values(map).filter(s => s.team);
+  return Object.values(map).filter(s => s.team && !s.team.disq);
+}
+// quem venceu a partida: pelo placar; no W.O. (abandono/desclassificação) vale o vencedor registrado
+function outcome(m) {
+  if (m.wo && m.winner) return m.winner === "draw" ? "draw" : m.winner === m.a ? "a" : "b";
+  const sa = sideScore(m, "a"), sb = sideScore(m, "b"); return sa > sb ? "a" : sb > sa ? "b" : "draw";
 }
 function critValue(key, s, group) {
   if (key === "direto") {
     const g = new Set(group.map(x => x.team.id)); let p = 0;
     prelims().filter(m => m.status === "done" && g.has(m.a) && g.has(m.b) && (m.a === s.team.id || m.b === s.team.id)).forEach(m => {
       const mine = m.a === s.team.id ? "a" : "b", other = mine === "a" ? "b" : "a";
-      if (sideScore(m, mine) > sideScore(m, other)) p++; // vitórias nos jogos entre as equipes empatadas
+      if (outcome(m) === mine) p++; // vitórias nos jogos entre as equipes empatadas
     });
     return p;
   }
@@ -1261,7 +1309,7 @@ function winnerOf(m) { return m && m.status === "done" && m.winner && m.winner !
 // (desempate: mais pontos no Confronto, depois na Arena Livre, depois a numeração do sorteio)
 function seedRanking() {
   const pre = new Map(standings().map(r => [r.team.id, r.SG])), fr = freeRanking();
-  return sortedTeams().filter(t => pre.has(t.id)).map(t => { const arena = fr.find(r => r.team.id === t.id)?.total || 0, cup = pre.get(t.id); return { team: t, arena, cup, total: arena + cup }; })
+  return sortedTeams().filter(t => pre.has(t.id) && !t.disq).map(t => { const arena = fr.find(r => r.team.id === t.id)?.total || 0, cup = pre.get(t.id); return { team: t, arena, cup, total: arena + cup }; })
     .sort((a, b) => b.total - a.total || b.cup - a.cup || b.arena - a.arena || byNum(a.team, b.team));
 }
 // Config. "Fase eliminatória": chaveamento pela Classificação Geral (Arena + saldo da preliminar) ou só pelo saldo da preliminar
@@ -1329,7 +1377,7 @@ function startMatch(id) {
   if (state.free.current) return warn("Há uma equipe na Arena Livre. Registre ou cancele a tentativa antes.");
   if (m.status !== "pending") return;
   leaveDrawScreen();
-  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, winner: null, pick: null, byDecision: false, r3: undefined, r3Winner: undefined, toR3: false });
+  Object.assign(m, { status: "live", phase: "r1", timer: newTimer(cfg().cupR1), rounds: { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } }, winner: null, pick: null, byDecision: false, r3: undefined, r3Winner: undefined, toR3: false, wo: undefined });
   state.cup.liveId = m.id; logEv(`${matchLabel(m)} iniciado: ${teamName(m.a)} × ${teamName(m.b)}`); save(); nav("confrontos");
 }
 function matchToggle() {
@@ -1501,6 +1549,63 @@ function cancelMatch() {
   }
   state.cup.liveId = null; save(); render();
 }
+/* ---- W.O. (5.7.5): ausência, ambas ausentes, abandono; e desclassificação (5.7.6) ----
+   Os balões da equipe ausente (ou os que restam ao robô que abandonou) contam como estourados a favor da adversária. */
+const WO_TXT = { absent: "ausência", both: "ambas ausentes", abandon: "abandono", disq: "desclassificação" };
+function applyWO(m, type, lostSide, reason, pick) {
+  const EB = matchEvents()[0], N = cfg().cupBalloons, other = lostSide === "a" ? "b" : "a";
+  const add = (side, n, r) => { for (let i = 0; i < n; i++) m.rounds[r].events.push({ id: uid(), side, pts: EB.pts, label: EB.label, t: "W.O.", seq: Date.now() + i }); };
+  let winner;
+  if (type === "abandon") { add(other, Math.max(0, N - poppedBy(m, other)), phRound(m.phase) || 2); winner = m[other]; }
+  else {
+    m.rounds = { 1: { events: [] }, 2: { events: [] }, 3: { events: [] } };
+    if (type === "both") winner = m.stage === "prelim" ? "draw" : pick;
+    else { add(other, N, 1); winner = m[other]; }
+  }
+  const byDecision = type === "both" && m.stage !== "prelim";
+  if (state.cup.liveId === m.id) state.cup.liveId = null;
+  delete m._backup;
+  Object.assign(m, { status: "done", phase: "review", timer: newTimer(0), winner, byDecision, pick: null, r3: undefined, r3Winner: undefined, toR3: false, autoEnd: undefined, wo: { type, side: type === "both" ? null : lostSide, reason: str(reason) } });
+  m.timer.status = "over";
+  logEv(`${matchLabel(m)} — W.O. (${WO_TXT[type]}${type === "both" ? "" : `: ${teamName(m[lostSide])}`}): ${teamName(m.a)} ${sideScore(m, "a")} × ${sideScore(m, "b")} ${teamName(m.b)} · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : ""}`}${reason ? `. Motivo: ${reason}` : ""}`);
+}
+function cupWO(id) {
+  const m = state.cup.matches.find(x => x.id === id); if (!m || m.status === "done") return;
+  if (m.status === "pending" && liveMatch()) return warn("Finalize o confronto em andamento antes.");
+  const live = m.status === "live", A = esc(teamName(m.a)), B = esc(teamName(m.b));
+  const opt = (v, l, chk) => `<label class="check"><input type="radio" name="wo" value="${v}" ${chk ? "checked" : ""}> ${l}</label>`;
+  openModal(`<h2>🚫 W.O. — ${esc(matchLabel(m))}</h2><p class="muted">${A} × ${B}. Os balões da equipe ausente (ou os que restam ao robô que abandonou) contam como estourados a favor da adversária.</p>
+    <form id="woF"><div class="actions col">${live ? opt("ab:a", `<b>${A}</b> abandonou — ${B} vence`, true) + opt("ab:b", `<b>${B}</b> abandonou — ${A} vence`) : ""}
+      ${opt("ab-a", `<b>${A}</b> ausente — ${B} vence por W.O. (${cfg().cupBalloons * cfg().cupBalloon} × 0)`, !live)}${opt("ab-b", `<b>${B}</b> ausente — ${A} vence por W.O.`)}${opt("both", `Ambas ausentes — ${m.stage === "prelim" ? "empate 0 × 0" : "vencedor por decisão da comissão"}`)}</div>
+      ${m.stage !== "prelim" ? `<div class="mt-s"><label>Se ambas ausentes, vencedor (decisão da comissão)<select name="pick"><option value="${esc(m.a)}">${A}</option><option value="${esc(m.b)}">${B}</option></select></label></div>` : ""}
+      <div class="mt-s"><label>Motivo / observação<input name="reason" maxlength="200" placeholder="ex.: equipe não se apresentou em 2 min"></label></div>
+      <div class="actions mt"><button class="btn danger big">Registrar W.O.</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
+  document.getElementById("woF").onsubmit = e => {
+    e.preventDefault(); const F = e.target, v = F.elements.wo.value;
+    const type = v === "both" ? "both" : v.startsWith("ab:") ? "abandon" : "absent", side = v.slice(-1);
+    if (!confirm("Registrar o W.O.? O resultado fica valendo (pode ser corrigido depois com ✏️ Corrigir).")) return;
+    applyWO(m, type, side, F.elements.reason.value, F.elements.pick?.value);
+    save(); closeModal(); toast("W.O. registrado"); checkProgress(); render();
+  };
+}
+// Desclassificação (5.7.6): sai das classificações; jogos ainda não disputados viram W.O. para os adversários
+function disqualify(id) {
+  const t = findTeam(id); if (!t || t.disq) return;
+  if (state.free.current?.teamId === id || [liveMatch()].some(m => m && (m.a === id || m.b === id))) return warn("A equipe está jogando agora. Termine ou cancele a tentativa/confronto antes.");
+  const reason = prompt(`DESCLASSIFICAR ${t.name}\n\nA equipe sai das classificações e da premiação. Os pontos dos adversários contra ela ficam, e os confrontos dela ainda não disputados viram W.O. para os adversários.\n\nMotivo (obrigatório):`, "");
+  if (reason === null) return; if (!str(reason)) return warn("Informe o motivo da desclassificação.");
+  t.disq = { at: new Date().toISOString(), reason: str(reason) };
+  logEv(`Equipe DESCLASSIFICADA: ${t.name}. Motivo: ${str(reason)}`);
+  const ko = state.cup.matches.filter(m => m.stage !== "prelim");
+  if (ko.length && ko.every(m => m.status === "pending") && ko.some(m => m.a === id || m.b === id)) resyncSemis(); // semifinais não começaram: vaga para o próximo
+  state.cup.matches.filter(m => m.status === "pending" && (m.a === id || m.b === id)).forEach(m => applyWO(m, "disq", m.a === id ? "a" : "b", "desclassificação de " + t.name));
+  checkProgress(); save(); toast(`${t.name} desclassificada`); render();
+}
+function undoDisqualify(id) {
+  const t = findTeam(id); if (!t?.disq) return;
+  if (!confirm(`Reverter a desclassificação de ${t.name}?\nOs W.O. já registrados por causa dela continuam; corrija-os com ✏️ Corrigir, se for o caso.`)) return;
+  delete t.disq; logEv(`Desclassificação revertida: ${t.name}`); resyncSemis(); checkProgress(); save(); render();
+}
 // Corrige um confronto já encerrado direto pelos números (funciona mesmo com outro confronto em andamento)
 function cupEdit(id) {
   const m = state.cup.matches.find(x => x.id === id); if (!m || m.status !== "done") return;
@@ -1517,7 +1622,7 @@ function cupEdit(id) {
   openModal(`<h2>Corrigir confronto</h2><p class="muted">${esc(matchLabel(m))} · ${esc(teamName(m.a))} × ${esc(teamName(m.b))} · atual: <b>${sideScore(m, "a")} × ${sideScore(m, "b")}</b></p>
     <form id="cupEditF">${RS.map(r => `<h3 class="mt-s">${r === 3 ? `${r3Label(m)} <span class="muted small">(desempate, só se empatar)</span>` : `Round ${r}`}</h3><div class="ce-grid">${f(r, "a")}${f(r, "b")}</div>`).join("")}
     ${ko ? `<div class="mt-s"><label>${pickLbl}<select name="pick"><option value="${esc(m.a)}" ${(m.r3Winner || m.pick || m.winner) === m.a ? "selected" : ""}>${esc(teamName(m.a))}</option><option value="${esc(m.b)}" ${(m.r3Winner || m.pick || m.winner) === m.b ? "selected" : ""}>${esc(teamName(m.b))}</option></select></label></div>` : ""}
-    <p class="mt-s">Novo placar: <b id="cupEditTot"></b></p>
+    <p class="mt-s">Novo placar: <b id="cupEditTot"></b></p>${fixFields()}
     <div class="actions mt"><button class="btn primary big">Salvar correção</button><button type="button" class="btn big" onclick="closeModal()">Cancelar</button></div></form>`);
   const F = document.getElementById("cupEditF");
   const val = (k, max) => F.elements[k] ? Math.max(0, Math.min(max, Math.round(num(F.elements[k].value, 0)))) : 0;
@@ -1537,6 +1642,7 @@ function cupEdit(id) {
   F.oninput = upd; upd();
   F.onsubmit = e => {
     e.preventDefault();
+    const why = fixRead(F); if (why === null) return;
     const tb = RS.reduce((t, r) => t + val(`b${r}a`, N), 0), ta = RS.reduce((t, r) => t + val(`b${r}b`, N), 0);
     if (tb > N || ta > N) return warn(`Cada robô tem ${N} balões no confronto: a soma dos rounds não pode passar de ${N}.`);
     const sa = total("a"), sb = total("b"), d = decide(), winner = d.winner, byDecision = !!d.byDecision;
@@ -1562,9 +1668,9 @@ function cupEdit(id) {
     if (drop && !confirm(drop === "ko" ? "Com essa correção a classificação muda: semifinais e final serão apagadas e geradas novamente. Continuar?" : "O vencedor da semifinal mudou: a disputa de 3º lugar e a final serão apagadas e geradas novamente. Continuar?")) { Object.assign(m, old); return; }
     if (drop === "ko") state.cup.matches = state.cup.matches.filter(x => x.stage === "prelim");
     if (drop === "final") state.cup.matches = state.cup.matches.filter(x => x.stage !== "final" && x.stage !== "third");
-    Object.assign(m, { byDecision, pick: byDecision ? winner : null, r3: d.r3 || (ko && newRounds[3].events.length ? r3Mode : undefined), r3Winner: d.r3 === "sudden" ? winner : undefined });
+    Object.assign(m, { byDecision, pick: byDecision ? winner : null, r3: d.r3 || (ko && newRounds[3].events.length ? r3Mode : undefined), r3Winner: d.r3 === "sudden" ? winner : undefined, wo: undefined });
     if (m.r3 === "off") m.r3 = undefined;
-    logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}`);
+    logEv(`${matchLabel(m)} — corrigido: ${teamName(m.a)} ${sa} × ${sb} ${teamName(m.b)} (antes: ${before}) · ${winner === "draw" ? "empate" : `vencedor ${teamName(winner)}${byDecision ? " (decisão da comissão)" : d.r3 ? ` (Round 3 · ${R3_NAME[d.r3]})` : ""}`}. Motivo: ${why}`);
     save(); closeModal(); toast("Confronto corrigido"); resyncSemis(); checkProgress(); render();
   };
 }
@@ -1593,11 +1699,12 @@ function confrontos() {
       ${bracketCard()}`);
 }
 function phaseTracker() {
-  const p = prelims(), pd = p.filter(m => m.status === "done").length, s = semis(), sd = s.filter(m => m.status === "done").length, f = finalMatch();
+  const p = prelims(), pd = p.filter(m => m.status === "done").length, s = semis(), sd = s.filter(m => m.status === "done").length, f = finalMatch(), th = thirdMatch();
   const st = (label, info, state_) => `<div class="phase ${state_}"><b>${label}</b><span>${info}</span></div>`;
   return `<div class="phases">
     ${st("Fase preliminar", `${pd}/${p.length}`, pd === p.length ? "done" : "active")}
     ${st("Semifinais", s.length ? `${sd}/2` : "aguardando", !s.length ? "" : sd === 2 ? "done" : "active")}
+    ${cfg().cupThird || th ? st("3º lugar", th ? (th.status === "done" ? "encerrada" : "a disputar") : "aguardando", !th ? "" : th.status === "done" ? "done" : "active") : ""}
     ${st("Final", f ? (f.status === "done" ? "encerrada" : "a disputar") : "aguardando", !f ? "" : f.status === "done" ? "done" : "active")}
   </div>`;
 }
@@ -1613,7 +1720,8 @@ function nextPanel() {
     <div class="center"><div class="eyebrow">PRÓXIMO CONFRONTO · ${esc(matchLabel(m)).toUpperCase()}</div></div>
     <div class="versus"><div class="vs-team">${teamCell(a)}</div><div class="vs">×</div><div class="vs-team">${teamCell(b)}</div></div>
     <div class="center"><button class="btn primary huge" onclick="startMatch('${esc(m.id)}')" ${state.free.current ? "disabled" : ""}>▶ Chamar e iniciar confronto</button>
-    ${state.free.current ? `<p class="muted small">Há uma tentativa da Arena Livre em andamento.</p>` : ""}</div>
+    ${state.free.current ? `<p class="muted small">Há uma tentativa da Arena Livre em andamento.</p>` : ""}
+    <p class="mt-s"><button class="btn small ghost" onclick="cupWO('${esc(m.id)}')">🚫 Ausência / W.O.</button></p></div>
   </div>`;
 }
 function livePanel(m) {
@@ -1661,14 +1769,14 @@ function livePanel(m) {
       </div>
     ${fighter("b", b, sb)}</div>
     <details class="mt-s" ${logs && ph === "review" ? "open" : ""}><summary class="muted">Marcações (${m.rounds[1].events.length + m.rounds[2].events.length + (m.rounds[3]?.events.length || 0)}) — clique em ✕ para remover uma específica</summary><div class="log">${logs || `<div class="muted small">Nenhuma marcação.</div>`}</div></details>
-    <div class="right">${live ? `<button class="btn small ghost" onclick="repeatRound()">🔁 Repetir Round ${rn} (falha técnica)</button>` : ""}<button class="btn small ghost" onclick="cancelMatch()">${fix ? "✕ Descartar correção" : "✕ Cancelar confronto"}</button></div>
+    <div class="right">${live ? `<button class="btn small ghost" onclick="repeatRound()">🔁 Repetir Round ${rn} (falha técnica)</button>` : ""}${fix || XMODE ? "" : `<button class="btn small ghost" onclick="cupWO('${esc(m.id)}')">🚫 W.O. / abandono</button>`}<button class="btn small ghost" onclick="cancelMatch()">${fix ? "✕ Descartar correção" : "✕ Cancelar confronto"}</button></div>
   </div>`;
 }
 function matchRow(m) {
   const live = liveMatch(), nm = nextMatch();
   let chip = `<span class="chip wait">Na fila</span>`;
   if (m.status === "live") chip = `<span class="chip live">● Jogando</span>`;
-  else if (m.status === "done") chip = `<span class="chip done">✓ Encerrado</span>`;
+  else if (m.status === "done") chip = m.wo ? `<span class="chip out">W.O.</span>` : `<span class="chip done">✓ Encerrado</span>`;
   else if (nm && nm.id === m.id) chip = `<span class="chip next">Próximo</span>`;
   const act = m.status === "pending" && !live ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>`
     : m.status === "done" ? `<button class="btn tiny" onclick="cupEdit('${esc(m.id)}')" title="Corrigir resultado">✏️ Corrigir</button>` : "";
@@ -1684,6 +1792,7 @@ function prelimCard() {
 }
 function teamStatus(id, rows) {
   const live = liveMatch(), nm = nextMatch(), c = champion(), f = finalMatch();
+  if (isDisq(id)) return `<span class="chip out">🚫 Desclassificada</span>`;
   if (live && (live.a === id || live.b === id)) return `<span class="chip live">● Jogando</span>`;
   if (c && c.id === id) return `<span class="chip gold">🏆 Vencedor - Confronto Direto</span>`;
   if (nm && (nm.a === id || nm.b === id)) return `<span class="chip next">Próximo</span>`;
@@ -1727,7 +1836,7 @@ function bracketCard() {
     const id = m ? m[side] : null, t = findTeam(id), win = m && winnerOf(m) === id && id;
     return `<div class="b-team ${win ? "winner" : ""} ${t ? "" : "ph"}"><span>${t ? esc(t.name) : ph}</span>${m && m.status === "done" ? `<b>${reveal ? sideScore(m, side) : "••"}</b>` : ""}${win ? "<em>✓</em>" : ""}</div>`;
   };
-  const box = (m, title, pa, pb) => `<div class="b-match ${m?.status || ""}"><div class="b-title">${title}${m ? ` · ${m.status === "live" ? "● jogando" : m.status === "done" ? (m.byDecision ? "decisão da comissão" : koResult(m).r3 ? esc(r3Label(m)) : "encerrada") : "a disputar"}` : ""}</div>${slot(m, "a", pa)}${slot(m, "b", pb)}${m && m.status === "pending" && !liveMatch() ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>` : m && m.status === "done" ? `<button class="btn tiny" onclick="cupEdit('${esc(m.id)}')">✏️ Corrigir</button>` : ""}</div>`;
+  const box = (m, title, pa, pb) => `<div class="b-match ${m?.status || ""}"><div class="b-title">${title}${m ? ` · ${m.status === "live" ? "● jogando" : m.status === "done" ? (m.wo ? `W.O. (${WO_TXT[m.wo.type]})` : m.byDecision ? "decisão da comissão" : koResult(m).r3 ? esc(r3Label(m)) : "encerrada") : "a disputar"}` : ""}</div>${slot(m, "a", pa)}${slot(m, "b", pb)}${m && m.status === "pending" && !liveMatch() ? `<button class="btn tiny primary" onclick="startMatch('${esc(m.id)}')">Iniciar</button>` : m && m.status === "done" ? `<button class="btn tiny" onclick="cupEdit('${esc(m.id)}')">✏️ Corrigir</button>` : ""}</div>`;
   const third = cupPlaces()[2], sp = seedPh();
   return `<div class="card mt ko"><div class="card-head"><h2>🏅 Fase eliminatória</h2><span class="pill">mata-mata</span></div>
     <p class="muted small seed-note">📋 Chaveamento das semifinais pela <b>${esc(seedTxt())}</b>.${cfg().koR3 !== "off" ? ` Empate: <b>${esc(r3Label({ r3: cfg().koR3 }))}</b> (sem repor balões).` : " Empate: decisão da comissão."}</p>
@@ -1749,7 +1858,7 @@ function cupPointsOf(id) {
 }
 function generalRanking() {
   const fr = freeRanking();
-  return sortedTeams().map(t => {
+  return sortedTeams().filter(t => !t.disq).map(t => {
     const arena = fr.find(r => r.team.id === t.id)?.total || 0, cup = cupPointsOf(t.id);
     return { team: t, arena, cup, total: arena + cup };
   }).sort((a, b) => b.total - a.total || b.cup - a.cup || b.arena - a.arena || byNum(a.team, b.team));
@@ -1793,7 +1902,7 @@ function podiumData(kind) {
 }
 function podiumHtml(kind) {
   const d = podiumData(kind), medal = ["🥇", "🥈", "🥉"];
-  const col = i => { const it = d.items[i]; return `<div class="pd-col p${i + 1}"><div class="pd-medal">${medal[i]}</div><div class="pd-name">${it.t ? esc(it.t.name) : "A definir"}</div>${it.t ? `<div class="pd-school">${esc(schoolText(it.t))}</div>` : ""}${it.sub && it.t ? `<div class="pd-sub">${esc(it.sub)}</div>` : ""}<div class="pd-step">${i + 1}º</div></div>`; };
+  const col = i => { const it = d.items[i]; if (it.t?.disq) { it.t = null; it.sub = ""; it.vago = true; } return `<div class="pd-col p${i + 1}"><div class="pd-medal">${medal[i]}</div><div class="pd-name">${it.t ? esc(it.t.name) : it.vago ? "Vago (desclassificada)" : "A definir"}</div>${it.t ? `<div class="pd-school">${esc(schoolText(it.t))}</div>` : ""}${it.sub && it.t ? `<div class="pd-sub">${esc(it.sub)}</div>` : ""}<div class="pd-step">${i + 1}º</div></div>`; };
   return `<div class="podium ${d.cls}">${col(1)}${col(0)}${col(2)}</div>${d.note ? `<p class="pd-note">${esc(d.note)}</p>` : ""}`;
 }
 function podio() {
@@ -1934,6 +2043,7 @@ function sceneMatch(m) {
       <div class="tv-side b"><div class="tv-team">${esc(b?.name)}</div><div class="tv-school">${esc(schoolText(b))}</div><div class="tv-big">${sb}</div></div>
     </div>
     <div class="tv-rules">${rulesCup()}</div>
+    ${inPrep(m.timer) ? `<div class="tv-prep">PREPARAR</div>` : ""}
   </div>`;
 }
 function tvHidden(title) { return `<div class="tv tv-rank" style="--f:${tvFit()}"><div class="tv-mode">${title}</div><div class="tv-hidden">🔒<b>Resultado será revelado em instantes</b></div></div>`; }
@@ -2132,12 +2242,12 @@ function resultSheets() {
       ...sortedTeams().map(t => [noLabel(t), t.name, schoolText(t), t.robot, t.professor, t.members, drawOf(t.id)?.number ?? "", drawOf(t.id)?.name ?? ""])] },
     { name: "Arena - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", ...Array.from({ length: R }, (_, i) => `Rodada ${i + 1}`), "Tentativas", "Soma", "Melhor rodada", state.settings.freeRankMode === "melhor" ? "Pontuação (melhor rodada)" : "Pontuação (soma)"],
       ...fr.map((x, i) => [i + 1, noLabel(x.team), x.team.name, schoolText(x.team), ...x.scores.map(v => v === null ? "" : v), x.done, x.sum, x.done ? x.best : "", x.total])] },
-    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor", "Balões de outra cor", "Balões da própria cor", "Saídas da arena", "Pontos", "Repetições (falha técnica)", "Registrado em"],
-      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.name ?? "", countL(a, "Balão de outra cor"), countL(a, "Balão da própria cor"), countL(a, "Saiu da arena"), attemptTotal(a), (a.repeats || []).map(x => `${fmtDate(x.at)}: ${x.reason}`).join(" | "), fmtDate(a.at)]; })] },
+    { name: "Arena - Tentativas", rows: [["Rodada", "Nº", "Equipe", "Escola", "Cor", "Balões de outra cor", "Balões da própria cor", "Saídas da arena", "Pontos", "Repetições (falha técnica)", "Registrado em", "Ausência (W.O.)"],
+      ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).map(a => { const t = findTeam(a.teamId); return [a.round, noLabel(t), t?.name || "Equipe removida", schoolText(t), a.color?.name ?? "", countL(a, "Balão de outra cor"), countL(a, "Balão da própria cor"), countL(a, "Saiu da arena"), attemptTotal(a), (a.repeats || []).map(x => `${fmtDate(x.at)}: ${x.reason}`).join(" | "), fmtDate(a.at), a.wo ? `Sim${a.wo.reason ? " — " + a.wo.reason : ""}` : ""]; })] },
     { name: "Arena - Marcações", rows: [["Rodada", "Equipe", "Escola", "Tempo", "Evento", "Pontos"],
       ...[...state.free.attempts].sort((a, b) => a.round - b.round || byNum(findTeam(a.teamId) || { name: "" }, findTeam(b.teamId) || { name: "" })).flatMap(a => { const t = findTeam(a.teamId); return a.events.map(e => [a.round, t?.name || "Equipe removida", schoolText(t), e.t, e.label, e.pts]); })] },
     { name: "Confronto - Jogos", rows: [["Fase", "Confronto", "Equipe A", "Escola A", "A · Round 1", "A · Round 2", "A · Round 3", "A · Total", "Equipe B", "Escola B", "B · Round 1", "B · Round 2", "B · Round 3", "B · Total", "Resultado", "Vencedor", "Decisão da comissão", "Desempate (Round 3)", "Situação", "Repetições (falha técnica)"],
-      ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin && m.r3 ? sideScore(m, "a", 3) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin && m.r3 ? sideScore(m, "b", 3) : "", fin ? sideScore(m, "b") : "", fin ? (m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin && m.r3 ? R3_NAME[m.r3] : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar", (m.repeats || []).map(x => `Round ${x.round} — ${fmtDate(x.at)}: ${x.reason}`).join(" | ")]; })] },
+      ...allMatches.map(m => { const a = findTeam(m.a), b = findTeam(m.b), fin = m.status === "done"; return [stageName(m), matchName(m), a?.name || "A definir", schoolText(a), fin ? sideScore(m, "a", 1) : "", fin ? sideScore(m, "a", 2) : "", fin && m.r3 ? sideScore(m, "a", 3) : "", fin ? sideScore(m, "a") : "", b?.name || "A definir", schoolText(b), fin ? sideScore(m, "b", 1) : "", fin ? sideScore(m, "b", 2) : "", fin && m.r3 ? sideScore(m, "b", 3) : "", fin ? sideScore(m, "b") : "", fin ? (m.wo ? `W.O. (${WO_TXT[m.wo.type]})` : m.winner === "draw" ? "Empate" : "Vitória") : "", fin ? (m.winner === "draw" ? "—" : teamName(m.winner)) : "", fin && m.byDecision ? "Sim" : "", fin && m.r3 ? R3_NAME[m.r3] : "", fin ? "Encerrado" : m.status === "live" ? "Em andamento" : "A disputar", (m.repeats || []).map(x => `Round ${x.round} — ${fmtDate(x.at)}: ${x.reason}`).join(" | ")]; })] },
     { name: "Confronto - Classificação", rows: [["Posição", "Nº", "Equipe", "Escola", "Jogos", "Vitórias", "Empates", "Derrotas", "Pontos marcados", "Pontos sofridos", "Saldo", "Situação"],
       ...st.map(r => [r.pos, noLabel(r.team), r.team.name, schoolText(r.team), r.J, r.V, r.E, r.D, r.PM, r.PS, r.SG, situation(r.team.id) || (done ? (seeds().includes(r.team.id) ? "Classificado para a semifinal" : "Eliminado na fase preliminar") : "")])] },
     { name: "Confronto - Marcações", rows: [["Fase", "Confronto", "Round", "Tempo", "Equipe", "Escola", "Evento", "Pontos"],
@@ -2145,7 +2255,7 @@ function resultSheets() {
     { name: "Classificação Geral", rows: [["Posição", "Nº", "Equipe", "Escola", "Arena Livre", "Confronto Direto (pontos marcados)", "Total"],
       ...gr.map((r, i) => [i + 1, noLabel(r.team), r.team.name, schoolText(r.team), r.arena, r.cup, r.total])] },
     { name: "Cronograma", rows: [["Início", "Fim", "Horário", "Atividade", "Detalhamento"], ...state.schedule.map(x => [x.start, x.end, `${hFmt(x.start)} às ${hFmt(x.end)}`, x.title, x.detail.replace(/\*\*/g, "")])] },
-    { name: "Histórico", rows: [["Data e hora", "Registro"], ...state.log.map(x => [fmtDate(x.at), x.msg])] }
+    { name: "Histórico", rows: [["Data e hora", "Operador", "Registro"], ...state.log.map(x => [fmtDate(x.at), x.by || "", x.msg])] }
   ];
 }
 function downloadBlob(blob, name) {
@@ -2166,7 +2276,7 @@ function autoBackup(label, title) {
   setTimeout(() => {
     try {
       downloadBlob(buildXlsx(resultSheets()), `robosapiens-estoura-baloes-${label}-${stamp()}.xlsx`);
-      setTimeout(() => downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${label}-${stamp()}.json`), 600);
+      setTimeout(() => { downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${label}-${stamp()}.json`); markBackup(); }, 600);
       toast(`💾 Backup automático (${title}) salvo na pasta Downloads`);
     } catch (e) { console.error(e); warn("Não foi possível gerar o backup automático"); }
   }, 500);
@@ -2602,10 +2712,15 @@ function config() {
           <p class="muted small">O som enviado fica guardado só neste navegador (não vai no backup JSON; um telão em outro PC usa a voz gravada).</p></div>
         <div class="actions mt-s"><button class="btn small" onclick="getAudio();setTimeout(()=>beep('start'),60)">🔈 Testar bipe de início</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('warn'),60)">🔈 Testar bipe intermediário</button><button class="btn small" onclick="getAudio();setTimeout(()=>beep('end'),60)">🔈 Testar bipe final</button></div>
         <hr class="sep">
-        <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label></div>
+        <label class="check"><input type="checkbox" ${s.autoBackup ? "checked" : ""} onchange="setSetting('autoBackup',this.checked)"> Backup automático ao fim de cada etapa (planilha + JSON na pasta Downloads)</label>
+        <div class="beep-at"><label for="bkMin">💾 Backup periódico (JSON na pasta Downloads):</label><select id="bkMin" onchange="setSetting('backupMin',this.value)">${[[15, "a cada 15 min — padrão"], [10, "a cada 10 min"], [30, "a cada 30 min"], [0, "desligado"]].map(([v, l]) => `<option value="${v}" ${s.backupMin === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <p class="muted small">Só salva se algo mudou desde o último backup. Último backup deste PC: <b>${BK.last ? esc(fmtDate(new Date(BK.last).toISOString())) : "nenhum ainda"}</b>. Na 1ª vez o navegador pode perguntar se permite "baixar vários arquivos": clique em <b>Permitir</b>.</p>
+        <hr class="sep">
+        <label for="operName">👤 Operador deste computador (vai no histórico de cada registro)</label>
+        <input id="operName" maxlength="60" value="${esc(operator())}" placeholder="nome de quem opera o sistema" onchange="setOperator(this.value);toast('Operador salvo')"></div>
       <div class="card"><h2>⚔️ Critérios de desempate (Confronto Direto)</h2><p class="muted small">Aplicados em ordem quando equipes empatam no saldo de pontos. Marque os previstos no regulamento. Se o empate persistir, a Comissão decide a ordem na própria classificação.</p><div class="tb-list">${tb}</div></div>
       <details class="card fold"><summary><b>📜 Histórico de alterações</b> <span class="muted small">(${state.log.length})</span></summary>
-        <div class="log mt-s">${state.log.slice(-300).reverse().map(x => `<div class="log-item"><span><b>${esc(fmtDate(x.at))}</b> · ${esc(x.msg)}</span></div>`).join("") || `<div class="muted small">Nenhum registro ainda.</div>`}</div>
+        <div class="log mt-s">${state.log.slice(-300).reverse().map(x => `<div class="log-item"><span><b>${esc(fmtDate(x.at))}</b>${x.by ? ` · <i>${esc(x.by)}</i>` : ""} · ${esc(x.msg)}</span></div>`).join("") || `<div class="muted small">Nenhum registro ainda.</div>`}</div>
         <p class="muted small mt-s">Registro de sorteios, resultados, correções, anulações, repetições e ajustes. Também vai na planilha Excel (aba Histórico).</p>
         ${state.log.length ? `<div class="actions mt-s"><button class="btn small danger" onclick="clearLog()">🗑 Limpar histórico</button></div>` : ""}</details>
       <div class="card"><h2>⚠️ Reiniciar</h2><div class="actions col">
@@ -2645,7 +2760,7 @@ function setThird(on) {
 }
 function toggleTb(i) { state.settings.tiebreak[i].on = !state.settings.tiebreak[i].on; save(); render(); }
 function moveTb(i, d) { const a = state.settings.tiebreak, j = i + d; if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; save(); render(); }
-function exportData() { downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${stamp()}.json`); }
+function exportData() { downloadBlob(new Blob([JSON.stringify(officialState(), null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-${stamp()}.json`); if (!XMODE) markBackup(); }
 function importData(e) {
   const input = e.target, file = input.files[0]; if (!file) return;
   input.value = ""; // permite importar o mesmo arquivo de novo
@@ -2757,6 +2872,26 @@ function timerTick(bg = false) {
 }
 setInterval(() => { timerTick(); if (XMODE) withOfficial(() => timerTick(true)); }, 200);
 
+/* ---------- Backup automático periódico (sempre do estado OFICIAL, também com a guia Extras aberta) ---------- */
+function periodicBackup() {
+  if (TELAO_WINDOW || RESETTING) return;
+  const o = officialState(), min = o.settings.backupMin;
+  if (!min || !o.settings.autoBackup || !BK.dirty || Date.now() - BK.last < min * 60000) return;
+  try {
+    downloadBlob(new Blob([JSON.stringify(o, null, 2)], { type: "application/json" }), `robosapiens-estoura-baloes-backup-auto-${stamp()}.json`);
+    markBackup(); toast(`💾 Backup automático salvo (${nowHHMM()})`);
+  } catch (e) { console.error(e); }
+}
+setInterval(periodicBackup, 30000);
+function updateBkPill() {
+  const el = document.getElementById("bkPill"); if (!el || TELAO_WINDOW) return;
+  const o = officialState(), min = o?.settings.backupMin || 0, late = BK.dirty && (!BK.last || (min && Date.now() - BK.last > min * 2 * 60000));
+  el.classList.remove("hidden"); el.classList.toggle("late", !!late);
+  el.textContent = BK.last ? `💾 Backup ${(d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`)(new Date(BK.last))}` : "💾 Sem backup";
+  el.title = `Último backup deste PC: ${BK.last ? fmtDate(new Date(BK.last).toISOString()) : "nenhum"}${min ? ` · automático a cada ${min} min` : " · automático periódico desligado"}. Clique para salvar um backup (JSON) agora.`;
+}
+setInterval(updateBkPill, 30000);
+
 /* ---------- Rede local ---------- */
 function fetchT(url, ms, opt = {}) {
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -2844,6 +2979,7 @@ function startUI() {
     document.getElementById("btnFullscreen").onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); };
     document.getElementById("netPill").onclick = () => nav("telao");
     document.getElementById("tvPill").onclick = () => nav("telao");
+    document.getElementById("bkPill").onclick = () => { exportData(); toast("💾 Backup (JSON) salvo na pasta Downloads"); };
     document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
     document.addEventListener("keydown", e => {
       if (e.key === "Escape") { closeModal(); if (document.body.classList.contains("telao-full")) exitTelao(); }

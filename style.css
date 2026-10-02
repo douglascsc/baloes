@@ -527,3 +527,7 @@ body.x-mode .event-badge strong:after{content:" · MODO EXTRAS";color:#6d28d9}
 .x-rec summary{cursor:pointer}
 .tv-xwrap{position:relative;height:100%}
 .tv-xtag{position:absolute;top:1.2cqw;left:50%;transform:translateX(-50%);padding:.5cqw 1.6cqw;border-radius:99px;background:#6d28d9;color:#fff;font-weight:900;font-size:1.5cqw;letter-spacing:.15cqw;white-space:nowrap;z-index:4}
+/* backup periódico */
+.bk-pill{border:1px solid var(--line);background:#fff;border-radius:99px;padding:8px 12px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+.bk-pill.late{background:var(--yellow-l);border-color:var(--yellow);color:#8a5a00}
+.tv-match{position:relative}
