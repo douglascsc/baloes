@@ -532,7 +532,7 @@ body.x-mode .event-badge strong:after{content:" · MODO EXTRAS";color:#6d28d9}
 .bk-pill.late{background:var(--yellow-l);border-color:var(--yellow);color:#8a5a00}
 .tv-match{position:relative}
 /* Juízes pelo celular */
-body.juiz-mode .nav-btn:not([data-view=inicio]):not([data-view=arena]):not([data-view=confrontos]):not([data-view=geral]):not([data-view=podio]):not([data-view=crono]),
+body.juiz-mode .nav-btn:not([data-view=inicio]):not([data-view=arena]):not([data-view=confrontos]):not([data-view=geral]):not([data-view=podio]):not([data-view=crono]):not([data-view=telao]):not([data-view=equipes]),
 body.juiz-mode .nav-sep, body.juiz-mode #tvPill, body.juiz-mode #bkPill, body.juiz-mode #btnTelao{display:none!important}
 body.juiz-mode .net-pill{cursor:pointer}
 .big-url{font-size:16px;word-break:break-all}

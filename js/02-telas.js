@@ -33,7 +33,7 @@ function toggleReveal() { reveal = !reveal; render(); }
 /* ============================ NAVEGAÇÃO ============================ */
 function nav(view) {
   if (CMD_RUN) { render(); return; } // comando de juiz no note: não troca a tela de quem está no note
-  if (JUIZ && !JUDGE_VIEWS.includes(view)) return warn("No celular do juiz: Início, Arena Livre, Confronto Direto, classificações e cronograma.");
+  if (JUIZ && !JUDGE_VIEWS.includes(view)) return warn("No celular do juiz: Início, Cronograma, Equipes (sorteio), Arena Livre, Confronto Direto, classificações, Pódio e Telão.");
   if (XMODE) {
     // dentro de Extras, as funções do jogo pedem a tela da Arena/Confronto: fica na guia Extras
     if (["arena", "confrontos", "extras"].includes(view)) { state.view = "extras"; save(); render(); window.scrollTo({ top: 0 }); return; }
@@ -137,10 +137,21 @@ function scheduleForm(id) {
     if (!data.end) return fieldErr(F, "end", "Informe o horário de fim.");
     if (data.end <= data.start) return fieldErr(F, "end", "O fim precisa ser depois do início.");
     if (!data.title) return fieldErr(F, "title", "Informe o nome da atividade.");
+    scheduleSave(id || null, data);
+  };
+}
+// Grava a atividade (separada da janela para poder vir do celular do juiz)
+function scheduleSave(id, data) {
+  const hh = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(str(v)) ? str(v) : "";
+  data = { start: hh(data?.start), end: hh(data?.end), title: str(data?.title).slice(0, 80), detail: str(data?.detail).slice(0, 600) };
+  if (!data.start || !data.end || data.end <= data.start || !data.title) return warn("Atividade inválida: confira os horários e o nome.");
+  const x = id ? state.schedule.find(a => a.id === id) : null;
+  if (id && !x) return warn("Essa atividade não existe mais no cronograma.");
+  {
     logEv(x ? `Cronograma: atividade editada — ${hFmt(data.start)} às ${hFmt(data.end)} ${data.title}${x.title !== data.title || x.start !== data.start || x.end !== data.end ? ` (antes: ${hFmt(x.start)} às ${hFmt(x.end)} ${x.title})` : ""}` : `Cronograma: atividade incluída — ${hFmt(data.start)} às ${hFmt(data.end)} ${data.title}`);
     if (x) Object.assign(x, data); else state.schedule.push({ id: uid(), ...data });
-    state = normalize(state); save(); closeModal(); toast(x ? "Atividade atualizada" : "Atividade incluída"); render();
-  };
+    state = normalize(state); save(); if (!CMD_RUN) closeModal(); toast(x ? "Atividade atualizada" : "Atividade incluída"); render();
+  }
 }
 function deleteActivity(id) {
   const x = state.schedule.find(a => a.id === id); if (!x) return;
@@ -163,10 +174,11 @@ function equipes() {
       ${t.robot || t.professor ? `<div class="team-meta">${t.robot ? `<span>🤖 Robô: ${esc(t.robot)}</span>` : ""}${t.professor ? `<span>👨‍🏫 ${esc(t.professor)}</span>` : ""}</div>` : ""}
       ${t.members ? `<div class="team-members"><span class="school-label">INTEGRANTES</span>${esc(t.members)}</div>` : ""}
       ${t.disq ? `<div class="notice warn mt-s">🚫 <b>Desclassificada</b> · ${esc(t.disq.reason)} <span class="muted small">(${esc(fmtDate(t.disq.at))})</span></div>` : ""}
-      <div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button>${started ? (t.disq ? `<button class="btn small" onclick="undoDisqualify('${esc(t.id)}')">↺ Reverter desclassificação</button>` : `<button class="btn small danger" onclick="disqualify('${esc(t.id)}')">🚫 Desclassificar</button>`) : ""}<button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>
+      ${JUIZ ? "" : `<div class="team-actions"><button class="btn small" onclick="editTeam('${esc(t.id)}')">✏️ Editar</button>${started ? (t.disq ? `<button class="btn small" onclick="undoDisqualify('${esc(t.id)}')">↺ Reverter desclassificação</button>` : `<button class="btn small danger" onclick="disqualify('${esc(t.id)}')">🚫 Desclassificar</button>`) : ""}<button class="btn small danger" onclick="deleteTeam('${esc(t.id)}')">🗑 Excluir</button></div>`}
     </div>`).join("");
   main().innerHTML = head("Equipes", `${teams().length} equipes cadastradas.`,
-    `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="showOnTv('numeros')">📺 Mostrar no telão</button><button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button><button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`) +
+    `${teams().some(t => t.number) ? `<button class="btn small ghost" onclick="clearNumbers()">Limpar numeração</button>` : ""}<button class="btn" onclick="showOnTv('numeros')">📺 Mostrar no telão</button><button class="btn" onclick="drawNumbers()">🎲 Sortear numeração</button>${JUIZ ? "" : `<button class="btn primary" onclick="teamForm()">+ Nova equipe</button>`}`) +
+    (JUIZ ? `<div class="notice mb">📱 Pelo celular do juiz: sorteio da numeração e telão. Cadastro, edição e desclassificação de equipes ficam no note.</div>` : "") +
     (teams().length && !teams().every(t => t.number) ? `<div class="notice mb">Equipes sem numeração aparecem como <b>Equipe XX</b>. Use <b>🎲 Sortear numeração</b> antes de gerar os confrontos.</div>` : "") +
     (started ? `<div class="notice warn mb">A competição já começou. Alterar nomes é seguro; excluir equipes ou refazer o sorteio pode exigir reiniciar etapas.</div>` : "") +
     `<div class="grid g3">${cards || `<div class="empty span-all">Nenhuma equipe cadastrada. Clique em <b>+ Nova equipe</b>.</div>`}</div>`;

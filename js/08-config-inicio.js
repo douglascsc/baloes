@@ -356,8 +356,8 @@ function spaceTarget(e) {
 const JUDGE_ACTIONS = ["callTeam", "callNext", "freeToggle", "freeEvent", "freeUndo", "freeRemoveEvent", "freeFinish", "freeCancel", "freeRepeat", "freeWO", "freeVoid", "freeEditApply",
   "closeArena", "reopenArena", "drawColors", "drawMissing", "startMatch", "matchToggle", "endRound", "startRound2", "startRound3", "repeatRound", "matchEvent", "matchUndo",
   "matchRemoveEvent", "pickWinner", "confirmResult", "cancelMatch", "cupEditApply", "woApply", "adjTimer", "generatePrelim", "confirmTieOrder", "moveInTie", "clearManualOrder",
-  "setDisplay", "toggleTvReveal", "showOnTv"];
-const JUDGE_VIEWS = ["inicio", "arena", "confrontos", "geral", "podio", "crono"];
+  "setDisplay", "toggleTvReveal", "showOnTv", "scheduleSave", "deleteActivity", "restoreSchedule", "drawNumbers", "clearNumbers"];
+const JUDGE_VIEWS = ["inicio", "equipes", "arena", "confrontos", "geral", "podio", "crono", "telao"];
 const JKEY = "robosapiens_estoura_baloes_juiz";
 const JUDGE = { name: "", pin: "", pending: [], judges: {} };
 try { const j = JSON.parse(localStorage.getItem(JKEY) || "{}"); JUDGE.name = str(j.name).slice(0, 40); JUDGE.pin = str(j.pin).slice(0, 8); } catch (e) { /* segue */ }

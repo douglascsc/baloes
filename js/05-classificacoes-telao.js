@@ -227,7 +227,8 @@ function telao() {
   const d = state.display;
   const opt = (v, l) => `<button class="btn ${d.mode === v ? "primary" : ""}" onclick="setDisplay('${v}')">${l}</button>`;
   main().innerHTML = head("Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
-    `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
+    JUIZ ? "" : `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
+    (JUIZ ? `<div class="notice mb">📱 Você controla o telão do note: o que escolher aqui aparece no telão na hora.</div>` : "") +
     `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("numeros", "🎲 Sorteio da numeração")}${opt("cores", "🎨 Sorteio das cores")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}${opt("podio-cup", "🥇 Pódio Confronto Direto")}${opt("podio-geral", "🥇 Pódio Classificação Geral")}${opt("podio-arena", "🥇 Pódio Arena Livre")}${opt("extras", "🧪 Sessão Extras (fora da competição)")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
     ${netCard()}
