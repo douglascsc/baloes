@@ -27,6 +27,9 @@ PORTS = range(8000, 8011)
 
 lock = threading.Lock()
 store = {"rev": 0, "data": None}
+# Sessao Extras para o telao (so quando o operador escolhe "Sessao Extras" no telao).
+# Fica so na memoria, separada dos dados oficiais: nao vai para o dados-competicao.json.
+extras_store = {"extras": None}
 
 
 def load_store():
@@ -119,6 +122,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 out = {"rev": store["rev"], "now": int(time.time() * 1000)}
                 if since is None or str(store["rev"]) != since:
                     out["data"] = store["data"]
+                    out["extras"] = extras_store["extras"]
             return self.send_json(out)
         # nao expoe o backup, o proprio servidor nem pastas ocultas (.git etc.)
         parts = [p for p in url.path.split("/") if p]
@@ -142,11 +146,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             data = payload.get("data")
             if not isinstance(data, dict) or not isinstance(data.get("teams"), list):
                 return self.send_json({"erro": "formato invalido"}, 400)
+            extras = payload.get("extras")
         except (ValueError, UnicodeDecodeError):
             return self.send_json({"erro": "JSON invalido"}, 400)
         with lock:
             store["rev"] += 1
             store["data"] = data
+            extras_store["extras"] = extras if isinstance(extras, dict) else None
             try:
                 persist()
             except OSError as e:

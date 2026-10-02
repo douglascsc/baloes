@@ -280,7 +280,7 @@ function normalize(raw) {
   s.schedV = 3;
   s.log = (Array.isArray(s.log) ? s.log : []).filter(x => x && x.msg).map(x => ({ at: str(x.at), msg: str(x.msg) })).slice(-3000);
   const an = s.display?.anim;
-  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores", "podio-cup", "podio-geral", "podio-arena"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal,
+  s.display = { mode: ["auto", "arena", "cup", "bracket", "geral", "crono", "numeros", "cores", "podio-cup", "podio-geral", "podio-arena", "extras"].includes(s.display?.mode) ? s.display.mode : "auto", reveal: !!s.display?.reveal,
     anim: an && ["numeros", "cores"].includes(an.kind) && Array.isArray(an.order) ? { kind: an.kind, at: num(an.at, 0), order: an.order.map(sid).filter(id => ids.has(id)) } : null };
   s.view = ["inicio", "crono", "equipes", "cores", "arena", "confrontos", "geral", "podio", "telao", "config"].includes(s.view) ? s.view : "inicio";
   return s;
@@ -1837,6 +1837,7 @@ function animTick() {
 setInterval(animTick, 90);
 function telaoScene() {
   const d = state.display, cur = state.free.current, live = liveMatch();
+  if (d.mode === "extras") return sceneExtras(); // só quando escolhido (nunca no automático)
   if (d.mode === "numeros") return sceneNumbers();
   if (d.mode === "cores") return sceneColors();
   if (d.mode === "arena") return sceneFreeRank();
@@ -1912,7 +1913,7 @@ function telao() {
   const opt = (v, l) => `<button class="btn ${d.mode === v ? "primary" : ""}" onclick="setDisplay('${v}')">${l}</button>`;
   main().innerHTML = head("Telão", "O que o público vê. Abra numa segunda janela e arraste para o projetor/TV.",
     `<button class="btn primary big" onclick="openTelaoWindow()">📺 Abrir janela do telão</button><button class="btn big" onclick="fullTelao()">⛶ Tela cheia aqui</button>`) +
-    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("numeros", "🎲 Sorteio da numeração")}${opt("cores", "🎨 Sorteio das cores")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}${opt("podio-cup", "🥇 Pódio Confronto Direto")}${opt("podio-geral", "🥇 Pódio Classificação Geral")}${opt("podio-arena", "🥇 Pódio Arena Livre")}</div>
+    `<div class="card"><h2>Exibir no telão</h2><div class="actions">${opt("auto", "⚡ Automático (ao vivo)")}${opt("arena", "🎈 Classificação Arena Livre")}${opt("cup", "⚔️ Classificação Confronto Direto")}${opt("bracket", "🏅 Chaveamento")}${opt("numeros", "🎲 Sorteio da numeração")}${opt("cores", "🎨 Sorteio das cores")}${opt("geral", "🏆 Classificação Geral")}${opt("crono", "🗓️ Cronograma")}${opt("podio-cup", "🥇 Pódio Confronto Direto")}${opt("podio-geral", "🥇 Pódio Classificação Geral")}${opt("podio-arena", "🥇 Pódio Arena Livre")}${opt("extras", "🧪 Sessão Extras (fora da competição)")}</div>
       <div class="actions mt-s"><button class="btn ${d.reveal ? "primary" : ""}" onclick="toggleTvReveal()">${d.reveal ? "🙈 Ocultar pontuação no telão" : "👁️ Revelar pontuação no telão"}</button><span class="muted small">No modo automático o telão mostra a equipe na Arena Livre ou o confronto em andamento. Classificações só aparecem quando reveladas.</span></div></div>
     ${netCard()}
     <div class="tv-preview mt"><div class="tv-frame">${telaoScene()}</div></div>`;
@@ -1927,7 +1928,7 @@ function netCard() {
 function updateTvPill() {
   const el = document.getElementById("tvPill"); if (!el) return;
   const d = officialState().display; // o telão mostra sempre a competição oficial
-  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral", crono: "cronograma", numeros: "sorteio da numeração", cores: "sorteio das cores", "podio-cup": "pódio Confronto", "podio-geral": "pódio Geral", "podio-arena": "pódio Arena" }[d.mode];
+  const mode = { auto: "automático", arena: "classif. Arena Livre", cup: "classif. Confronto", bracket: "chaveamento", geral: "classif. Geral", crono: "cronograma", numeros: "sorteio da numeração", cores: "sorteio das cores", "podio-cup": "pódio Confronto", "podio-geral": "pódio Geral", "podio-arena": "pódio Arena", extras: "🧪 sessão Extras" }[d.mode];
   el.innerHTML = `📺 Telão: ${mode} · ${d.reveal ? "<b>pontuação VISÍVEL</b>" : "pontuação oculta"}`;
   el.classList.toggle("on", !!d.reveal);
 }
@@ -1935,7 +1936,8 @@ function setDisplay(mode) { state.display.mode = mode; save(); render(); }
 // Coloca no telão a tela do sorteio (antes de sortear já mostra as equipes; ao sortear, atualiza sozinha)
 function showOnTv(mode) { setDisplay(mode); toast(mode === "numeros" ? "Telão: sorteio da numeração" : "Telão: sorteio das cores"); }
 // Ao começar a prova, o telão sai da tela de sorteio e volta ao automático
-function leaveDrawScreen() { if (state.display.mode === "numeros" || state.display.mode === "cores") state.display.mode = "auto"; }
+// uma tentativa/confronto OFICIAL começando tira o telão dos sorteios e da sessão Extras (volta ao automático)
+function leaveDrawScreen() { if (["numeros", "cores", "extras"].includes(state.display.mode)) state.display.mode = "auto"; }
 function toggleTvReveal() { state.display.reveal = !state.display.reveal; save(); render(); }
 function openTelaoWindow() {
   const w = window.open(location.pathname + "#telao", "telao_estoura_baloes", "width=1280,height=720");
@@ -1968,7 +1970,12 @@ function renderTelaoWindow() {
 }
 /* Mostra um "+50"/"+100" grande no telão a cada nova marcação */
 const popSeen = new Set(); let popInit = false;
+// no telão em "Sessão Extras" os destaques são os da sessão (os oficiais só são marcados como vistos)
 function tvPops() {
+  if (state.display.mode !== "extras") return tvPopsCore();
+  tvPopsCore(true); const xs = extrasView(); if (xs) withXState(xs, () => tvPopsCore());
+}
+function tvPopsCore(silent = false) {
   const layer = document.getElementById("tvPops"); if (!layer) return;
   const evs = [];
   const cur = state.free.current;
@@ -1977,7 +1984,7 @@ function tvPops() {
   if (m) [1, 2, 3].forEach(r => (m.rounds[r]?.events || []).forEach(e => evs.push({ e, side: e.side, color: e.pts >= 0 ? "#2463c9" : "#d33434" })));
   const novos = evs.filter(x => !popSeen.has(x.e.id));
   evs.forEach(x => popSeen.add(x.e.id));
-  if (!popInit) { popInit = true; return; }
+  if (!popInit || silent) { popInit = true; return; }
   novos.slice(-3).forEach(x => {
     const d = document.createElement("div");
     d.className = `tv-pop ${x.side} ${x.e.pts < 0 ? "neg" : "pos"}`;
@@ -2256,6 +2263,43 @@ function loadExtrasStore() { try { const j = JSON.parse(localStorage.getItem(XKE
 function saveExtras() {
   if (!XMODE) return;
   try { localStorage.setItem(XKEY, JSON.stringify({ v: 1, session: state, history: XHIST })); } catch (e) { warn("Não foi possível salvar os Extras neste navegador (espaço cheio). Limpe o histórico de Extras."); }
+  // telão em rede mostrando a sessão Extras: envia (em campo separado; os dados oficiais vão iguais)
+  if (NET.on && NET.local && OFFICIAL?.display.mode === "extras") { clearTimeout(NET.timer); NET.timer = setTimeout(pushState, 120); }
+}
+/* ---- Extras no telão: só quando o operador escolhe "Sessão Extras" (nunca no automático) ---- */
+let XVIEW = null, xCache = { raw: null, xs: null }; // telão: sessão recebida deste PC (localStorage) ou do servidor
+function xFromRaw(raw) { try { return raw && typeof raw === "object" && raw.x ? xRestore(raw) : null; } catch (e) { return null; } }
+function extrasView() {
+  if (XMODE) return state;
+  if (TELAO_WINDOW) return XVIEW;
+  let raw = null; try { raw = localStorage.getItem(XKEY); } catch (e) { /* segue */ }
+  if (raw !== xCache.raw) { xCache = { raw, xs: xFromRaw(loadExtrasStore()?.session) }; }
+  return xCache.xs;
+}
+// o que vai para o servidor junto com o oficial: a sessão Extras só se o telão estiver em "Sessão Extras"
+function xPayload() { if (officialState().display.mode !== "extras") return null; const xs = extrasView(); return xs ? JSON.parse(JSON.stringify(xs)) : null; }
+// desenha com o estado da sessão (somente leitura, sem salvar)
+function withXState(xs, fn) { const o = state, ox = XMODE; state = xs; XMODE = true; try { return fn(); } finally { state = o; XMODE = ox; } }
+function xTimer(k) { const xs = extrasView(); if (!xs) return null; return withXState(xs, () => k === "xfree" ? state.free.current?.timer : k === "xmatch" ? liveMatch()?.timer : null); }
+function sceneExtras() {
+  const xs = extrasView(), tag = `<div class="tv-xtag">🧪 EXTRAS · FORA DA COMPETIÇÃO OFICIAL</div>`;
+  const wait = `<div class="tv tv-idle"><img src="assets/robosapiens.png" alt="RoboSapiens" class="tv-logo"><div class="tv-title">Extras</div><div class="tv-next"><span>AGUARDANDO</span><b>Sessão Extras</b><small>fora da competição oficial</small></div></div>`;
+  const html = !xs ? wait : withXState(xs, () => {
+    const cur = state.free.current, live = liveMatch(), a = state.free.attempts[state.free.attempts.length - 1], m = state.cup.matches[0];
+    if (cur) return sceneFree(cur);
+    if (live) return sceneMatch(live);
+    if (state.x?.kind === "free" && a) { const t = findTeam(a.teamId), tot = attemptTotal(a); return `<div class="tv tv-champ"><div class="tv-label">ARENA LIVRE · RESULTADO</div><div class="tv-team">${esc(t?.name)}</div><div class="tv-school">${esc(schoolText(t))}</div><div class="tv-score"><span>PONTOS</span><b class="${tot < 0 ? "minus" : ""}">${signed(tot)}</b></div></div>`; }
+    if (state.x?.kind === "cup" && m && m.status === "done") return sceneMatch(m).replace("RESULTADO", m.winner === "draw" ? "RESULTADO · EMPATE" : `RESULTADO · VENCEDOR: ${esc(teamName(m.winner)).toUpperCase()}`);
+    return wait;
+  });
+  return `<div class="tv-xwrap">${html.replace(/data-timer="free"/g, 'data-timer="xfree"').replace(/data-timer="match"/g, 'data-timer="xmatch"')}${tag}</div>`;
+}
+// botão em Extras: escolhe (ou tira) a sessão Extras no telão — muda só a exibição do telão
+function xTvToggle() {
+  if (!XMODE) return;
+  const on = OFFICIAL.display.mode === "extras";
+  withOfficial(() => { state.display.mode = on ? "auto" : "extras"; save(); });
+  toast(on ? "Telão de volta ao automático (competição oficial)" : "Telão mostrando a sessão Extras"); render();
 }
 // Nova sessão em branco: CÓPIA das equipes, cores, cores sorteadas e configurações oficiais (nunca referências)
 function xBlank(kind = null) {
@@ -2392,6 +2436,7 @@ function xRecordHtml(r, open = false) {
     <div class="small mt-s">${r.note ? `<p>📝 ${esc(r.note)}</p>` : ""}<p>${esc(r.detail || "")}${r.kind === "free" ? ` · cor ${esc(r.color)} · ${r.seconds} s` : ` · regras da ${esc(r.rules)}`}</p>
     <div class="log">${(r.events || []).map(e => `<div class="log-item"><span>${e.r ? `R${e.r} · ` : ""}${esc(e.t)} · ${e.team ? `<b>${esc(e.team)}</b> · ` : ""}${esc(e.label)}</span><b>${signed(e.pts)}</b></div>`).join("") || `<div class="muted small">Nenhuma marcação.</div>`}</div></div></details>`;
 }
+const xTvBtn = () => OFFICIAL?.display.mode === "extras" ? `<button class="btn primary" onclick="xTvToggle()" title="O telão está mostrando esta sessão. Clique para voltar ao automático (competição oficial).">📺 No telão · voltar ao automático</button>` : `<button class="btn" onclick="xTvToggle()" title="Mostrar esta sessão Extras no telão (só quando você escolher; o automático nunca mostra Extras)">📺 Mostrar no telão</button>`;
 function xClearHistory() {
   if (!XHIST.length || !confirm(`Apagar os ${XHIST.length} registros do histórico de Extras?\nA competição oficial não é afetada.`)) return;
   XHIST = []; save(); render();
@@ -2401,8 +2446,9 @@ function extras() {
   const x = state.x, cur = state.free.current, m = state.cup.matches[0], live = liveMatch(), O = OFFICIAL;
   const offLive = O.free.current ? `Arena Livre — ${esc(O.teams.find(t => t.id === O.free.current.teamId)?.name || "")}` : (() => { const lm = O.cup.matches.find(mm => mm.id === O.cup.liveId && mm.status === "live"); return lm ? "Confronto Direto em andamento" : ""; })();
   const banner = `<div class="x-banner"><b>🧪 MODO EXTRAS — NÃO É RODADA OFICIAL</b><span>Nada feito aqui altera a competição: placar, resultados, classificação, histórico, rodada atual e cronômetros oficiais ficam intactos.</span></div>
+    ${!x.kind && OFFICIAL.display.mode === "extras" ? `<div class="notice mb">📺 O telão está em <b>Sessão Extras</b> (aguardando uma sessão). ${xTvBtn()}</div>` : ""}
     ${offLive ? `<div class="notice warn mb">⚠️ Há uma atividade OFICIAL em andamento (${offLive}). Ela continua normalmente em segundo plano (cronômetro e bipes); para operá-la, volte à guia dela.</div>` : ""}`;
-  const ctrl = x.kind ? `<div class="x-ctrl"><span class="pill">${x.kind === "free" ? "🎈 Arena Livre" : "⚔️ Confronto Direto"} · ${X_PURPOSE[x.purpose]}${x.note ? ` · ${esc(x.note)}` : ""}</span><span class="grow"></span><button class="btn" onclick="xNew(null)">🆕 Nova sessão</button><button class="btn warning" onclick="xFinish()">🏁 Finalizar sessão</button></div>` : "";
+  const ctrl = x.kind ? `<div class="x-ctrl"><span class="pill">${x.kind === "free" ? "🎈 Arena Livre" : "⚔️ Confronto Direto"} · ${X_PURPOSE[x.purpose]}${x.note ? ` · ${esc(x.note)}` : ""}</span><span class="grow"></span>${xTvBtn()}<button class="btn" onclick="xNew(null)">🆕 Nova sessão</button><button class="btn warning" onclick="xFinish()">🏁 Finalizar sessão</button></div>` : "";
   let body = "";
   if (!x.kind) {
     const last = x.last && XHIST.find(r => r.id === x.last);
@@ -2416,7 +2462,7 @@ function extras() {
     body = live ? livePanel(live) : m && m.status === "done" ? `<div class="card stage center"><div class="big-check">✓</div><h2>Resultado confirmado (Extras)</h2><div class="versus"><div class="vs-team">${teamCell(findTeam(m.a))}<div class="pts">${sideScore(m, "a")}</div></div><div class="vs">×</div><div class="vs-team">${teamCell(findTeam(m.b))}<div class="pts">${sideScore(m, "b")}</div></div></div><p><b>${m.winner === "draw" ? "Empate" : `Vencedor: ${esc(teamName(m.winner))}`}</b></p><p class="muted">Clique em <b>🏁 Finalizar sessão</b> para guardar no histórico de Extras ou em <b>🆕 Nova sessão</b>.</p></div>`
       : m ? `<div class="card stage center"><h2>Confronto cancelado</h2><div class="versus"><div class="vs-team">${teamCell(findTeam(m.a))}</div><div class="vs">×</div><div class="vs-team">${teamCell(findTeam(m.b))}</div></div><button class="btn primary huge" onclick="startMatch('${esc(m.id)}')">▶ Iniciar de novo</button></div>` : xSetupForm();
   }
-  const preview = (cur || live) ? `<details class="card mt" open><summary class="muted">📺 Prévia do telão para esta sessão (só nesta tela — o telão de verdade continua mostrando a competição oficial)</summary><div class="tv-preview mt-s"><div class="tv-frame">${telaoScene()}</div></div></details>` : "";
+  const preview = (cur || live) ? `<details class="card mt" open><summary class="muted">📺 Prévia do telão para esta sessão (${OFFICIAL.display.mode === "extras" ? "o telão está mostrando esta sessão" : "só nesta tela — o telão continua na competição oficial; use 📺 Mostrar no telão"})</summary><div class="tv-preview mt-s"><div class="tv-frame">${telaoScene()}</div></div></details>` : "";
   const hist = `<details class="card mt fold" ${!x.kind && XHIST.length ? "open" : ""}><summary><b>🗂️ Histórico de Extras</b> <span class="muted small">(${XHIST.length}) — separado do histórico oficial</span></summary>
     <div class="mt-s">${XHIST.slice().reverse().slice(0, 100).map(r => xRecordHtml(r)).join("") || `<div class="muted small">Nenhuma sessão finalizada ainda.</div>`}</div>
     ${XHIST.length ? `<div class="actions mt-s"><button class="btn small danger" onclick="xClearHistory()">🗑 Limpar histórico de Extras</button></div>` : ""}</details>`;
@@ -2619,7 +2665,7 @@ function fieldErr(form, name, msg) {
 
 function updateTimers() {
   document.querySelectorAll("[data-timer]").forEach(el => {
-    const t = el.dataset.timer === "free" ? state.free.current?.timer : liveMatch()?.timer;
+    const k = el.dataset.timer, t = k === "free" ? state.free.current?.timer : k === "match" ? liveMatch()?.timer : xTimer(k);
     if (!t) return;
     const l = left(t); el.textContent = fmt(l);
     el.classList.toggle("warn", t.status === "running" && l <= 5 && l > 0);
@@ -2628,13 +2674,20 @@ function updateTimers() {
 }
 function refreshTelaoFull() { const s = document.getElementById("tvScene"); if (s && document.body.classList.contains("telao-full")) { s.innerHTML = telaoScene(); tvPops(); updateTimers(); } }
 
-const lastPrep = { main: false, bg: false };
+const lastPrep = { main: false, bg: false, x: false };
 // bg = cronômetro OFICIAL rodando em segundo plano enquanto a guia Extras está aberta (sem redesenhar a tela)
 function timerTick(bg = false) {
   countdownBeep(state.free.current?.timer, "free"); countdownBeep(liveMatch()?.timer, "cup", liveMatch()?.phase);
   // fim do "Preparar": redesenha (status e botões de pontuação)
   const k = bg ? "bg" : "main", pr = inPrep(state.free.current?.timer) || inPrep(liveMatch()?.timer), prChanged = pr !== lastPrep[k]; lastPrep[k] = pr;
-  if (TELAO_WINDOW) { if (prChanged) render(); else updateTimers(); return; }
+  if (TELAO_WINDOW) {
+    let xch = false;
+    if (state.display.mode === "extras" && XVIEW) withXState(XVIEW, () => { // bipes e "Preparar" da sessão Extras mostrada no telão
+      countdownBeep(state.free.current?.timer, "free"); countdownBeep(liveMatch()?.timer, "cup", liveMatch()?.phase);
+      const xp = inPrep(state.free.current?.timer) || inPrep(liveMatch()?.timer); xch = xp !== lastPrep.x; lastPrep.x = xp;
+    });
+    if (prChanged || xch) render(); else updateTimers(); return;
+  }
   let changed = false;
   const cur = state.free.current, pre = bg ? "Competição oficial: " : "";
   if (cur && cur.timer.status === "running" && left(cur.timer) <= 0) {
@@ -2664,7 +2717,7 @@ async function pushState() {
   if (NET.busy) { NET.again = true; return; }
   NET.busy = true;
   try {
-    const r = await fetchT("/api/estado", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: officialState() }) });
+    const r = await fetchT("/api/estado", 4000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: officialState(), extras: xPayload() }) });
     if (!r.ok) throw new Error(r.status);
     NET.rev = (await r.json()).rev; setNet(true);
   } catch (e) { setNet(false); }
@@ -2677,7 +2730,7 @@ async function pollState() {
     const r = await fetchT(`/api/estado?since=${NET.rev}`, 3000);
     const j = await r.json(), t1 = Date.now();
     if (Number.isFinite(j.now)) NET.offset = j.now - (t0 + t1) / 2;
-    if (j.rev !== NET.rev && j.data) { NET.rev = j.rev; state = normalize(j.data); render(); }
+    if (j.rev !== NET.rev && j.data) { NET.rev = j.rev; state = normalize(j.data); XVIEW = xFromRaw(j.extras); render(); }
     setNet(true);
   } catch (e) { if (Date.now() - NET.lastOk > 3000) setNet(false); }
   setTimeout(pollState, 500);
@@ -2702,7 +2755,7 @@ async function detectServer() {
     const e = await (await fetchT("/api/estado", 3000)).json();
     NET.rev = e.rev || 0; NET.lastOk = Date.now();
     if (Number.isFinite(e.now)) NET.offset = e.now - Date.now();
-    if (TELAO_WINDOW) { if (e.data) state = normalize(e.data); }
+    if (TELAO_WINDOW) { if (e.data) state = normalize(e.data); XVIEW = xFromRaw(e.extras); }
     else if (e.data) { state = normalize(e.data); state.display.reveal = false; save(); }
     else save(); // servidor vazio: envia os dados deste PC
   } catch (err) { NET.on = false; }
@@ -2721,7 +2774,12 @@ function startUI() {
     // O Chrome/Edge tira da tela cheia uma janela aberta por outra quando se clica na janela que a abriu.
     // Cortar esse vínculo mantém o telão em tela cheia enquanto o operador usa o sistema (a sincronização não depende dele).
     try { if (window.opener) window.opener = null; } catch (e) { /* segue */ }
-    window.addEventListener("storage", e => { if (e.key === KEY && !NET.on) { state = load(); render(); } });
+    window.addEventListener("storage", e => {
+      if (NET.on) return;
+      if (e.key === KEY) { state = load(); render(); }
+      if (e.key === XKEY) { XVIEW = xFromRaw(loadExtrasStore()?.session); if (state.display.mode === "extras") render(); }
+    });
+    if (!NET.on) XVIEW = xFromRaw(loadExtrasStore()?.session);
     document.addEventListener("dblclick", e => { if (e.target.closest?.("#fsBtn")) return; if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
     document.addEventListener("fullscreenchange", updateFsBtn);
     if (NET.on) pollState();
