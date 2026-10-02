@@ -20,7 +20,7 @@ function config() {
         <div><label>Saída da arena (− pontos)</label><input type="number" min="0" max="1000" value="${s.freeExit}" onchange="setSetting('freeExit',this.value)"></div>
         <div><label>Balões montados na arena (por tentativa)</label><input type="number" min="1" max="99" value="${s.freeArenaBalloons}" onchange="setSetting('freeArenaBalloons',this.value)"></div>
         <div class="full"><label class="check"><input type="checkbox" ${s.freeMinZero ? "checked" : ""} onchange="setSetting('freeMinZero',this.checked)"> Não permitir pontuação negativa em uma tentativa (mínimo 0)</label></div>
-      </div>${balloonEstimate("free")}<p class="muted small mt-s">Padrão: 5 rodadas (de 1 a 5) · 30 s · +50 / −50 / −30. A Arena Livre também pode ser encerrada antes, na própria tela, ao fim de uma rodada. Mudanças de pontuação valem para as próximas marcações.</p></div>
+      </div>${balloonEstimate("free")}<p class="muted small mt-s">Padrão: 5 rodadas (de 1 a 5) · 30 s · 12 balões por tentativa · +50 / −50 / −30. A Arena Livre também pode ser encerrada antes, na própria tela, ao fim de uma rodada. Mudanças de pontuação valem para as próximas marcações.</p></div>
       <div class="card"><h2>⚔️ Confronto Direto</h2><div class="form-grid">
         <div><label>Round 1 (segundos)</label><input type="number" min="5" max="900" value="${s.cupR1}" onchange="setSetting('cupR1',this.value)"></div>
         <div><label>Intervalo (segundos)</label><input type="number" min="0" max="900" value="${s.cupBreak}" onchange="setSetting('cupBreak',this.value)"></div>

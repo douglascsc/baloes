@@ -110,7 +110,7 @@ Em **Config.**, dá para ajustar, sem mexer no código:
 - **Confronto Direto:** fase preliminar (todos contra todos, 2 ou 4 jogos por equipe), tempo do Round 1, intervalo e Round 2, pontos (+ balão adversário, + saída do adversário) e pontos de classificação (vitória/empate/derrota).
 
 **Previsão máxima de balões** (nos blocos da Arena Livre e do Confronto Direto, em Config.):
-- Arena Livre: rodadas × equipes × balões montados na arena (padrão 9), com a divisão por cor.
+- Arena Livre: rodadas × equipes × balões montados na arena (padrão 12 por tentativa, independente do número de cores), com a divisão por cor.
 - Confronto Direto: (confrontos da fase preliminar + 2 semifinais + 3º lugar, se ligado, + 1 final) × 3 balões, o máximo que pode ser estourado por confronto.
 
 Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
