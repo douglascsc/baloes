@@ -18,7 +18,8 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 | **Cores** | Cores dos balões (até 8), sem número: o número que aparece no círculo da cor é sempre a numeração sorteada da equipe. O sistema começa com 3 (Azul, Preto, Laranja); dá para incluir até 8, editar, excluir e restaurar o padrão. Mostra também as cores sorteadas para as equipes. |
 | **Arena Livre** | Tudo da Arena Livre numa tela só: sorteio das cores, fila por rodada, chamada da equipe, cronômetro, pontuação, desfazer, classificação. |
 | **Confronto Direto** | Tudo do Confronto Direto numa tela só: geração da fase preliminar, confronto ao vivo, classificação, semifinais, final e Vencedor - Confronto Direto. |
-| **Classificação Geral** | Soma da Arena Livre com o saldo (pontos marcados) da fase preliminar do Confronto Direto. Semifinais, 3º lugar e final não contam. |
+| **Classificação Geral** | Soma da Arena Livre com o saldo (pontos marcados) da fase preliminar do Confronto Direto. Semifinais, 3º lugar e final não contam (padrão; em Config. dá para incluir a fase eliminatória). |
+| **Pódio** | Três pódios separados (Confronto Direto, Classificação Geral e Arena Livre), cada um com botão para mostrar no telão. |
 | **Cronograma** | Programação do dia: incluir, editar e excluir atividades (horário, atividade e detalhamento). A atividade em andamento é destacada pelo relógio, aparece no Início e pode ser exibida no telão. |
 | **Telão** | Tela para o público. Abra em outra janela (📺) e arraste para o projetor: ela acompanha tudo ao vivo. |
 | **Config.** | Rodadas e tempo da Arena Livre, critérios de desempate, **planilha Excel**, backup (JSON) e reinício. |
@@ -30,11 +31,11 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - **Falha técnica:** **🔁 Repetir tentativa** zera as marcações e o cronômetro, registrando o motivo. Uma tentativa já registrada pode ser **anulada** com motivo.
 - +50 por balão de outra cor · −50 por balão da própria cor · −30 por sair da arena.
 - Toda tentativa começa em **0**. A pontuação é calculada somente a partir das marcações da tentativa.
-- **↶ Desfazer última** e **✕** em cada marcação corrigem erros. Uma tentativa registrada pode ser **anulada** no histórico.
+- **↶ Desfazer última** e **✕** em cada marcação corrigem erros. Uma tentativa registrada pode ser **corrigida** (✏️ na fila da Arena ou no histórico de tentativas) ou **anulada** no histórico.
 - Classificação por soma das rodadas (ou melhor rodada, em Configurações). Ela é separada da classificação do Confronto Direto.
 
 ## Classificação Geral
-- **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + saldo (pontos marcados) da **fase preliminar** do Confronto Direto (+100 por balão, +30 por saída do adversário). Semifinais, 3º lugar e final não contam.
+- **Total** = pontuação da Arena Livre (soma das rodadas, ou melhor rodada) + saldo (pontos marcados) da **fase preliminar** do Confronto Direto (+100 por balão, +30 por saída do adversário). Semifinais, 3º lugar e final não contam. Em **Config. → Fase eliminatória e Classificação Geral** é possível escolher "Também a fase eliminatória" (aí semifinais, 3º lugar e final somam; o chaveamento não muda).
 - **Desempate:** mais pontos no Confronto Direto, depois mais pontos na Arena Livre. Persistindo, decisão da comissão.
 - O Vencedor - Confronto Direto é o vencedor da final. A Classificação Geral pode ser exibida no telão.
 
@@ -48,7 +49,8 @@ Abra `index.html` no navegador (Chrome/Edge recomendados). Os dados ficam salvos
 - **Robô saiu da arena (5.1.2.1 c):** +30 para o adversário e **só o round** encerra. No Round 1, segue para o intervalo e o Round 2 acontece normalmente, com os balões que sobraram. Não é possível marcar mais balões do que o robô tem. Se foi engano, **↶ Desfazer** (ou ✕ na marcação) reabre o round, pausado no tempo em que parou.
 - **↶ Desfazer última** de cada equipe e **✕** em cada marcação para corrigir erros. **✏️ Corrigir** (na lista de confrontos e no chaveamento) abre uma janela para ajustar os balões estourados e as saídas de cada equipe em cada round, mesmo com outro confronto em andamento; o vencedor, a classificação e, se preciso, semifinais/final são recalculados.
 - **Classificação da fase preliminar: pelo saldo** = soma dos pontos marcados pela equipe nos confrontos (os pontos do adversário não são descontados). Não há pontos de vitória/empate/derrota; a tabela mostra jogos (J), vitórias (V), empates (E), derrotas (D) e o saldo.
-- **Semifinais** geradas automaticamente com os **4 primeiros da Classificação Geral** (Arena Livre + saldo da fase preliminar): 1º × 4º e 2º × 3º. Saem quando a fase preliminar **e** a Arena Livre estão concluídas. Empate na Classificação Geral: mais pontos no Confronto, depois na Arena Livre, depois a menor numeração do sorteio. Se uma correção mudar os 4 primeiros antes de as semifinais começarem, elas são refeitas. **Disputa de 3º lugar:** perdedores das semifinais, jogada antes da final. **Final:** vencedores das semifinais.
+- **Semifinais** geradas automaticamente com os **4 primeiros da Classificação Geral** (Arena Livre + saldo da fase preliminar): 1º × 4º e 2º × 3º. Saem quando a fase preliminar **e** a Arena Livre estão concluídas. Em **Config. → Fase eliminatória** dá para trocar para **só o Confronto Direto** (saldo da fase preliminar, a Arena não conta; empate entre os 4 primeiros: critérios de desempate e ▲▼ da comissão). O critério usado aparece escrito no chaveamento, na súmula e no telão. Empate na Classificação Geral: mais pontos no Confronto, depois na Arena Livre, depois a menor numeração do sorteio. Se uma correção mudar os 4 primeiros antes de as semifinais começarem, elas são refeitas. **Disputa de 3º lugar:** perdedores das semifinais, jogada antes da final (pode ser desligada em Config.; sem ela, o 3º lugar fica com o perdedor de semifinal mais bem colocado na classificação do chaveamento). **Final:** vencedores das semifinais.
+- **Empate na fase eliminatória** (Config.): decisão da comissão (padrão) ou **Round 3** só se empatar, com os balões que sobraram (não são repostos): **morte súbita** (vence quem tirar o adversário da arena ou estourar os balões que restam dele) ou **pela pontuação** (vence quem marcar mais no Round 3). Sem decisão no Round 3: comissão.
 - Empate em semifinal ou final: o operador seleciona o vencedor definido pela Comissão Organizadora.
 
 ## Desempate (fase preliminar)
@@ -108,13 +110,13 @@ Em **Config.**, dá para ajustar, sem mexer no código:
 
 **Previsão máxima de balões** (nos blocos da Arena Livre e do Confronto Direto, em Config.):
 - Arena Livre: rodadas × equipes × balões montados na arena (padrão 9), com a divisão por cor.
-- Confronto Direto: (confrontos da fase preliminar + 2 semifinais + 1 final) × 3 balões, o máximo que pode ser estourado por confronto.
+- Confronto Direto: (confrontos da fase preliminar + 2 semifinais + 3º lugar, se ligado, + 1 final) × 3 balões, o máximo que pode ser estourado por confronto.
 
 Cada marcação guarda os pontos do momento: mudar a regra não altera o que já foi registrado.
 
 ## Durante a competição
 - **Ajuste do cronômetro:** botões **−5 s / +5 s** abaixo do cronômetro (ex.: o juiz iniciou atrasado). Nunca passa do tempo máximo.
-- **Sons:** volume ajustável em Config. → Sons e backup (padrão: máximo, 10 de 10). Bipes separados para a Arena Livre e para o Confronto Direto: **bipe de início** quando a tentativa ou o round começa (não ao retomar uma pausa), intermediário curto (padrão: Arena Livre aos 5 s, Confronto Direto aos 10 s; os segundos são configuráveis) e final longo, cada um podendo ser ligado ou desligado. No Confronto, o intervalo entre os rounds não bipa (opcional). Configure em Config. → Sons e backup.
+- **Sons:** volume ajustável em Config. → Sons e backup (padrão: máximo, 10 de 10). Bipes separados para a Arena Livre e para o Confronto Direto: **bipe de início** quando a tentativa ou o round começa (não ao retomar uma pausa), intermediário curto (padrão: Arena Livre aos 5 s, Confronto Direto aos 10 s; os segundos são configuráveis) e final longo, cada um podendo ser ligado ou desligado. No Confronto, o intervalo entre os rounds não bipa (opcional). **"PREPARAR":** ao clicar em Iniciar, o computador fala "Preparar" (voz em português do Edge/Chrome) ou toca um som enviado por você (mp3/wav), espera 2 s (ajustável) e aí bipa e o tempo começa a correr; pode ser desligado. O som enviado fica só naquele navegador. Configure em Config. → Sons e backup.
 - **Destaque no telão:** cada marcação aparece grande ("+50", "+100") por um instante.
 - **Falha técnica no Confronto:** **🔁 Repetir Round** zera o round atual (marcações e cronômetro), registrando o motivo.
 - **Backup automático:** ao fim da Arena Livre, da fase preliminar e da final, o sistema baixa sozinho a planilha e o JSON na pasta Downloads (pode ser desligado).

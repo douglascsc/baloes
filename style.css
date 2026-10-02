@@ -482,3 +482,30 @@ textarea:focus{border-color:#67b67f;box-shadow:0 0 0 3px rgba(21,148,71,.1)}
 .b-col.mid{display:flex;flex-direction:column;gap:14px}
 .b-third{margin-top:10px;padding:8px 12px;border-radius:10px;background:#f6efe6;border:1px solid #e7d3bb;font-size:13px;text-align:center}
 .tv-third{display:block;margin-top:.6cqw;font-size:1.4cqw;color:#8a5a2b;font-weight:800}
+/* Pódio (página e telão) */
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:18px;padding:12px 0 0}
+.pd-col{flex:1;max-width:260px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
+.pd-medal{font-size:44px;line-height:1}
+.pd-name{font-size:20px;font-weight:900;line-height:1.15}
+.pd-school{font-size:13px;color:#5f6b64}
+.pd-sub{font-size:13px;font-weight:800;color:#0f7a3a}
+.pd-step{width:100%;margin-top:8px;border-radius:12px 12px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-size:30px;font-weight:900;color:#fff;background:#9aa7a0}
+.pd-col.p1 .pd-step{height:170px;background:var(--gold,#c9a227)}
+.pd-col.p2 .pd-step{height:120px;background:#9aa7a0}
+.pd-col.p3 .pd-step{height:85px;background:#b07a45}
+.podium.cup .pd-col.p1 .pd-step{background:var(--cup)}.podium.arena .pd-col.p1 .pd-step{background:var(--arena)}
+.pd-note{text-align:center;color:#5f6b64;font-size:13px;margin-top:10px}
+.tv-podium .podium{width:86cqw;gap:2.4cqw}
+.tv-podium .pd-col{max-width:none}
+.tv-podium .pd-medal{font-size:6cqw}
+.tv-podium .pd-name{font-size:3.4cqw}
+.tv-podium .pd-school{font-size:1.6cqw}
+.tv-podium .pd-sub{font-size:1.8cqw}
+.tv-podium .pd-step{font-size:4cqw;border-radius:1.2cqw 1.2cqw 0 0;padding-top:1cqw;margin-top:1cqw}
+.tv-podium .pd-col.p1 .pd-step{height:17cqw}.tv-podium .pd-col.p2 .pd-step{height:12cqw}.tv-podium .pd-col.p3 .pd-step{height:8cqw}
+.tv-podium .pd-note{font-size:1.5cqw}
+/* "Preparar" antes do bipe de início */
+.tv-free{position:relative}
+.tv-prep{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9cqw;font-weight:900;letter-spacing:.4cqw;color:#fff;background:rgba(16,24,18,.82);padding:1.5cqw 4cqw;border-radius:2cqw;z-index:3}
+.tv-seed{font-size:1.5cqw;color:#5f6b64;font-weight:700}
+.seed-note{margin:-4px 0 10px}
